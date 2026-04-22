@@ -1,0 +1,59 @@
+name: woods-testbed
+
+# Two Rails variants share this compose file. Bring one up at a time
+# (or both — they bind to different ports and use separate bundle volumes).
+#
+#   docker compose up rails-8.0
+#   docker compose up rails-7.2
+#
+# WOODS_GEM_PATH points at the woods gem checkout on the host. Default
+# assumes the sibling-repo layout: woods-testbed and woods checked out
+# next to each other under the same parent directory. Override when
+# testing a worktree or another branch:
+#
+#   WOODS_GEM_PATH=/path/to/woods-worktree docker compose up rails-8.0
+#
+# Ports default to 3010 (Rails 8) and 3011 (Rails 7.2). Override with
+# RAILS_8_PORT / RAILS_72_PORT if those conflict with something else.
+
+x-common-env: &common-env
+  RAILS_ENV: development
+  WOODS_GEM_PATH: /woods-gem
+  BUNDLE_SILENCE_ROOT_WARNING: "1"
+
+services:
+  rails-8.0:
+    build:
+      context: ./apps/rails-8.0
+    image: woods-testbed-rails-8.0
+    container_name: woods-testbed-rails-8.0
+    ports:
+      - "${RAILS_8_PORT:-3010}:3000"
+    volumes:
+      - ./apps/rails-8.0:/app
+      - ./scripts:/app/script/shared:ro
+      - ${WOODS_GEM_PATH:-../woods}:/woods-gem:ro
+      - bundle-rails-8:/bundle
+    environment:
+      <<: *common-env
+
+  rails-7.2:
+    build:
+      context: ./apps/rails-7.2
+    image: woods-testbed-rails-7.2
+    container_name: woods-testbed-rails-7.2
+    ports:
+      - "${RAILS_72_PORT:-3011}:3000"
+    volumes:
+      - ./apps/rails-7.2:/app
+      - ./scripts:/app/script/shared:ro
+      - ${WOODS_GEM_PATH:-../woods}:/woods-gem:ro
+      - bundle-rails-7-2:/bundle
+    environment:
+      <<: *common-env
+
+volumes:
+  bundle-rails-8:
+    name: woods-testbed-bundle-rails-8
+  bundle-rails-7-2:
+    name: woods-testbed-bundle-rails-7-2

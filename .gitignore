@@ -1,0 +1,35 @@
+# App-level Rails ignores (apply to every variant)
+apps/*/log/*
+apps/*/tmp/*
+apps/*/storage/*
+apps/*/db/*.sqlite3
+apps/*/db/*.sqlite3-*
+apps/*/public/assets
+apps/*/public/packs
+apps/*/public/packs-test
+apps/*/node_modules
+apps/*/coverage
+apps/*/.byebug_history
+apps/*/.ruby-version
+
+# Keep the tmp and log dirs so Rails can write to them
+!apps/*/log/.keep
+!apps/*/tmp/.keep
+!apps/*/storage/.keep
+
+# Bundler artifacts
+apps/*/.bundle
+apps/*/vendor/bundle
+apps/*/Gemfile.lock
+
+# macOS / editor detritus
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Woods extraction output (regenerated on every run)
+apps/*/tmp/woods/
+
+# Local override compose files
+docker-compose.override.yml
