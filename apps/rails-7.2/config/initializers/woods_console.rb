@@ -7,7 +7,11 @@
 Woods.configure do |config|
   config.console_mcp_enabled = true
   config.console_redacted_columns = %w[password password_digest encrypted_password]
-  config.erd_enabled = true
-  config.erd_path = '/woods/erd'
-  config.erd_layers = %i[models controllers jobs mailers]
+
+  # ERD middleware (only on branches that ship it — guard keeps main-branch boots clean)
+  if config.respond_to?(:erd_enabled=)
+    config.erd_enabled = true
+    config.erd_path = '/woods/erd'
+    config.erd_layers = %i[models controllers jobs mailers]
+  end
 end
