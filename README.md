@@ -153,13 +153,15 @@ docker compose exec rails-7.2 bin/rails console
 
 ## What each variant has
 
-- The Rails Tutorial sample app models (`User`, `Micropost`,
-  `Relationship`)
-- A `Credential` model + seed fixtures used by
-  `woods_credentials_smoke.rb` to exercise Console MCP redaction across
-  real provider key shapes
-- A `config/initializers/woods_console.rb` that enables Console MCP, ERD
-  middleware, and a baseline set of redacted columns
+- **`rails-8.0` / `rails-7.2`:** the Rails Tutorial sample app models
+  (`User`, `Micropost`, `Relationship`), plus a `Credential` model + seed
+  fixtures used by `woods_credentials_smoke.rb` to exercise Console MCP
+  redaction across real provider key shapes.
+- **`rails-6.0`:** a minimal `Post`/`Comment` app (controller, job, mailer,
+  routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
+  `apps/rails-6.0/README.md`.
+- **All variants:** a `config/initializers/woods_console.rb` that enables
+  Console MCP, ERD middleware, and a baseline set of redacted columns.
 
 Agents have permission to modify anything under `apps/` — add models,
 migrations, controllers, initializers, or fixtures as needed to
