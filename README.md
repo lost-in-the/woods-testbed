@@ -17,9 +17,17 @@ scripts that assert behavioural invariants.
 |---|---|---|---|---|
 | `apps/rails-8.0` | 8.0.x | 3.3.1 | 3010 | `woods-testbed-rails-8.0` |
 | `apps/rails-7.2` | ~> 7.2.0 | 3.3.1 | 3011 | `woods-testbed-rails-7.2` |
+| `apps/rails-6.0` | ~> 6.0.0 | 3.0 | 3012 | `woods-testbed-rails-6.0` |
+
+The 8.0 and 7.2 variants are minimal forks of the Rails Tutorial sample app.
+The **rails-6.0** variant — the supported floor (`railties >= 6.0`, woods #135)
+— is a deliberately minimal, backend-only app (`Post`/`Comment`, a controller, a
+job, a mailer; no asset pipeline or JS bundler) so the Rails 6.0 boot stays small.
+It's validated via Docker/CI rather than the host, since Ruby 3.0 / Rails 6.0
+aren't installed on most dev machines.
 
 Each variant has its own `Gemfile`, its own bundle volume, and its own
-container. The two share `scripts/` (woods smoke scripts) via a read-only
+container. They share `scripts/` (woods smoke scripts) via a read-only
 bind mount at `/app/script/shared` inside the container.
 
 Contributing a new Rails version: copy an existing `apps/rails-X.Y`
@@ -40,7 +48,9 @@ woods-testbed/
 │   └── rails-7.2/        Rails 7.2 variant
 ├── scripts/              Shared smoke scripts (mounted at /app/script/shared)
 │   ├── woods_smoke.rb
-│   └── woods_credentials_smoke.rb
+│   ├── woods_credentials_smoke.rb
+│   ├── woods_worktree_smoke.rb          # git provenance in worktrees (#137)
+│   └── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
 ├── share/                Shared snippets (initializers, seeds) referenced by apps
 └── docker-compose.yml
 ```
@@ -84,7 +94,7 @@ WOODS_GEM_PATH=/absolute/path/to/woods-feature-branch \
 ### Changing ports
 
 ```bash
-RAILS_8_PORT=4010 RAILS_72_PORT=4011 docker compose up
+RAILS_8_PORT=4010 RAILS_72_PORT=4011 RAILS_60_PORT=4012 docker compose up
 ```
 
 ## Running woods against a variant
@@ -121,10 +131,18 @@ docker compose exec rails-8.0 bin/rails runner script/shared/woods_credentials_s
 
 # Rails 7.2 smoke
 docker compose exec rails-7.2 bin/rails runner script/shared/woods_smoke.rb
+
+# Git provenance in worktrees (#137) and extract-only Index Server boot (#138)
+docker compose exec rails-8.0 bin/rails runner script/shared/woods_worktree_smoke.rb
+docker compose exec rails-8.0 bin/rails runner script/shared/woods_extract_only_boot_smoke.rb
 ```
 
-Both scripts exit non-zero on failure, which makes them suitable for
-CI.
+All scripts exit non-zero on failure, which makes them suitable for
+CI. `woods_worktree_smoke.rb` asserts `Woods::GitProvenance` reports `"unknown"`
+for an unresolvable worktree git dir rather than a stale `GIT_BRANCH`/`GIT_SHA`.
+`woods_extract_only_boot_smoke.rb` asserts the Index Server resolves in
+pattern-only mode without an embedding index (and that `WOODS_REQUIRE_INDEX=1`
+still fails closed).
 
 ## Interactive Rails console
 
@@ -150,7 +168,8 @@ exercise gem functionality. The testbed exists to be reshaped.
 ## Troubleshooting
 
 **Gems rebuild every boot.** The bundle volume is per-variant
-(`woods-testbed-bundle-rails-8`, `woods-testbed-bundle-rails-7-2`).
+(`woods-testbed-bundle-rails-8`, `woods-testbed-bundle-rails-7-2`,
+`woods-testbed-bundle-rails-6-0`).
 Rebuilding shouldn't happen unless the `Gemfile.lock` changed — if it
 does, check that the volume wasn't recreated.
 
