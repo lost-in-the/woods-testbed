@@ -52,8 +52,27 @@ services:
     environment:
       <<: *common-env
 
+  # Supported floor: Rails 6.0 on Ruby 3.0 (woods #135). Minimal backend-only
+  # app — see apps/rails-6.0/README.md.
+  rails-6.0:
+    build:
+      context: ./apps/rails-6.0
+    image: woods-testbed-rails-6.0
+    container_name: woods-testbed-rails-6.0
+    ports:
+      - "${RAILS_60_PORT:-3012}:3000"
+    volumes:
+      - ./apps/rails-6.0:/app
+      - ./scripts:/app/script/shared:ro
+      - ${WOODS_GEM_PATH:-../woods}:/woods-gem:ro
+      - bundle-rails-6-0:/bundle
+    environment:
+      <<: *common-env
+
 volumes:
   bundle-rails-8:
     name: woods-testbed-bundle-rails-8
   bundle-rails-7-2:
     name: woods-testbed-bundle-rails-7-2
+  bundle-rails-6-0:
+    name: woods-testbed-bundle-rails-6-0
