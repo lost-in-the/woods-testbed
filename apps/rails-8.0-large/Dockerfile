@@ -36,4 +36,8 @@ WORKDIR /app
 
 EXPOSE 3000
 
-CMD ["bash", "-lc", "bundle install --jobs 4 && bin/rails db:prepare && bin/rails server -b 0.0.0.0 -p 3000"]
+# rm -f the pidfile: the app directory is a bind mount, so tmp/pids/server.pid
+# survives the container that wrote it. Recreating the container (e.g.
+# switching between the default and the ccr overlay) otherwise dies with
+# "A server is already running (pid: 1)" against a pid that no longer exists.
+CMD ["bash", "-lc", "rm -f tmp/pids/server.pid && bundle install --jobs 4 && bin/rails db:prepare && bin/rails server -b 0.0.0.0 -p 3000"]

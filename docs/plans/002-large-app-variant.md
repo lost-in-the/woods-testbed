@@ -151,8 +151,35 @@ Two consequences worth stating plainly:
   exists as a runtime volume mount. So the *running* container needs proxy
   access, not just the build.
 - **`network_mode: host` discards `ports:`**, so variants can't run side by side
-  under the overlay. Fine for a session working one variant at a time, and the
-  reason the overlay is opt-in.
+  *under the overlay*.
+
+### The overlay is only needed twice, not always
+
+That second consequence looked like it would block rung 13 (six daemons at
+once). It doesn't. **The overlay is needed for image builds and for the first
+boot only** — the boot that populates the named bundle volume. Once that volume
+is warm, `bundle install` resolves entirely from it and needs no network, so the
+variant runs on ordinary bridge networking with `ports:` intact.
+
+Verified: after one overlay boot, plain `docker compose up -d rails-8.0-large`
+gives `NetworkMode: woods-testbed_default`, port 3013 mapped, and
+`woods:extract` + `woods:validate` both green. So the working pattern behind a
+proxy is:
+
+```bash
+bin/ccr_compose.sh build rails-8.0-large     # overlay: CA + host network
+bin/ccr_compose.sh up -d rails-8.0-large     # overlay: warms the bundle volume
+docker compose up -d rails-8.0-large         # thereafter: bridge + ports
+```
+
+Two further notes for rung 13:
+
+- A durable version of this would vendor a gem snapshot into the image and run
+  `bundle install --local` at runtime, moving the network need to build time
+  permanently. Not required now, so not done.
+- Rung 13 may not need multiple containers at all. `Rails.root` is a **process**
+  singleton, not a container one — six daemon processes against six app copies
+  inside one container satisfies the same constraint with far less machinery.
 
 **Follow-up (not done here, per the append-don't-absorb rule):** only
 `apps/rails-8.0-large/Dockerfile` has the CA layer. The other three variants
