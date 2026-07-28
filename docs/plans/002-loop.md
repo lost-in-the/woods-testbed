@@ -30,7 +30,7 @@ gated by a command that returns an exit code rather than an opinion.
 |---|---|---|
 | 1 | Container bootstrap + README fixes (Phase 0a, 0c) | `bin/bootstrap_docker.sh && docker ps` exits 0 |
 | 2 | `rails-8.0-large` scaffold — boots, extracts, validates | `woods:extract && woods:validate` green in-container |
-| 3 | Naming contract for the kernel (see below) | File exists; reviewed by me before slice 4 starts |
+| 3 | Naming contract for the kernel (see below) | `woods_contract_smoke.rb` runs and reports a precise, non-empty violation list (exit 2) |
 | 4–7 | Kernel type families, ~5 types per iteration | `woods_type_coverage_smoke.rb` — covered-type count strictly increases |
 | 8 | CI workflow (Phase 0b) | Workflow run green on the branch |
 | 9 | Generator (Phase 2) | Generate twice → identical tree checksum; scale calibration recorded |
@@ -98,6 +98,21 @@ iteration conforms to it instead of re-deciding.
 This is cheap insurance in a single-context run and load-bearing across a
 session boundary, where "what did I name the invoice model" is otherwise
 unanswerable without reading the tree.
+
+**Its gate is mechanical, not human.** The contract was first gated on the
+maintainer's review, which put a person on the loop's critical path for a rung
+that mostly encodes decisions rather than making contentious ones. Instead the
+contract is machine-readable (`kernel_contract.yml`) and
+`scripts/woods_contract_smoke.rb` enforces it against a real extraction. Review
+becomes advisory; the loop only truly stops on the decisions listed under Stop
+conditions.
+
+Rung 3 passes when the check **fails usefully** — exit 2 with a precise,
+non-empty list. That list is the worklist for rungs 4–7, and it is the same
+red-test-first shape the gem's own CLAUDE.md mandates for new features. The
+check asserts *edges*, not counts: concern inlining from the including model's
+`metadata.inlined_concerns`, STI parentage from `metadata.parent_class`,
+navigation edges from `dependency_graph.json`.
 
 ---
 

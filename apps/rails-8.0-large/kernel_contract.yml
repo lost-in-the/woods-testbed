@@ -1,0 +1,183 @@
+# Kernel contract for apps/rails-8.0-large — the machine-readable half.
+#
+# This file is the single source of truth. KERNEL_CONTRACT.md explains the
+# reasoning; scripts/woods_contract_smoke.rb enforces what is written here
+# against a real extraction. Change this file, not the script, when the kernel
+# changes — and never let the two drift by restating expectations in prose.
+#
+# Every path below is the directory the corresponding extractor actually scans,
+# read off the gem's own *_DIRECTORIES constants rather than assumed.
+---
+version: 1
+
+domain: >-
+  A publishing platform with billing. Chosen because it produces genuine
+  cross-cutting edges — an article is published by a use case, which enqueues a
+  job, which mails an author and issues an invoice — rather than a flat pile of
+  unrelated classes.
+
+# ── Models ────────────────────────────────────────────────────────────────
+# The hub is Author: several models point at it, so PageRank has something to
+# rank and the dependents pass has real fan-in to resolve.
+models:
+  hub: Author
+  plain:
+    - Author
+    - Article
+    - Comment
+    - Tag
+    - ArticleTag
+  namespaced:
+    - Billing::Invoice
+    - Billing::LineItem
+
+# A PORO under app/models — a non-ActiveRecord class in the models directory is
+# exactly what PoroExtractor looks for, and what distinguishes `poro` from `model`.
+poros:
+  - class: WordCount
+    path: app/models/word_count.rb
+
+sti:
+  base: Billing::Payment
+  subclasses:
+    - Billing::CardPayment
+    - Billing::BankPayment
+
+# ── Concerns ──────────────────────────────────────────────────────────────
+# Archivable is included by exactly three models. That number is load-bearing:
+# concern inlining is the gem's headline differentiator and has had no host-app
+# coverage, and "included by several" is the case where inlining is worth
+# anything. The smoke asserts the count exactly, so silently dropping an include
+# fails rather than passing quietly.
+concerns:
+  - name: Archivable
+    path: app/models/concerns/archivable.rb
+    included_by:
+      - Article
+      - Comment
+      - Billing::Invoice
+  # Deliberately intersects the STI base, so inlining and STI interact rather
+  # than being tested in isolation.
+  - name: Auditable
+    path: app/models/concerns/auditable.rb
+    included_by:
+      - Billing::Payment
+  - name: RequiresAuthor
+    path: app/controllers/concerns/requires_author.rb
+    included_by:
+      - ArticlesController
+      - Billing::InvoicesController
+
+# ── Services in a non-standard directory ──────────────────────────────────
+# app/use_cases is one of ServiceExtractor's five directories and the one a
+# host app is least likely to have. #2 asks for a non-standard service
+# directory specifically; this is it.
+services:
+  directory: app/use_cases
+  classes:
+    - PublishArticle
+    - Billing::IssueInvoice
+
+jobs:
+  - PublishArticleJob
+  - Billing::ChargePaymentJob
+
+mailers:
+  - class: AuthorMailer
+    actions: [article_published]
+
+# ── Navigation edges ──────────────────────────────────────────────────────
+# Route-helper references resolved by RouteHelperResolver into graph edges.
+# These are what make the kernel a connected graph rather than 34 islands, and
+# they are the reason the contract exists at all.
+navigation_edges:
+  - from: app/views/articles/index.html.erb
+    helpers: [article_path, new_article_path]
+    to: ArticlesController
+  - from: app/views/articles/show.html.erb
+    helpers: [articles_path, article_comments_path]
+    to: CommentsController
+  - from: app/views/billing/invoices/index.html.erb
+    helpers: [billing_invoice_path]
+    to: Billing::InvoicesController
+
+# ── Events ────────────────────────────────────────────────────────────────
+# ActiveSupport::Notifications instrument/subscribe, both under app/, which is
+# the only place EventExtractor scans.
+events:
+  - name: article.published
+    publisher: app/use_cases/publish_article.rb
+    subscriber: app/listeners/article_listener.rb
+
+state_machines:
+  - class: Billing::Payment
+    gem: aasm
+    attribute: state
+
+# ── Everything else, by type ──────────────────────────────────────────────
+# One exemplar per remaining type, with the path the extractor scans. `min` is
+# the minimum unit count the smoke requires; it is 1 unless a type is
+# inherently plural.
+# Keys here are the index's **directory** names (which is how manifest.json's
+# `counts` is keyed), not the singular type names. Using the singular form made
+# every one of these report 0 regardless of what the kernel contained.
+types:
+  decorators:      { path: app/decorators/article_decorator.rb,      exemplar: ArticleDecorator,     min: 1 }
+  serializers:     { path: app/serializers/article_serializer.rb,    exemplar: ArticleSerializer,    min: 1 }
+  managers:        { path: app/managers/subscription_manager.rb,     exemplar: SubscriptionManager,  min: 1 }
+  validators:      { path: app/validators/slug_validator.rb,         exemplar: SlugValidator,        min: 1 }
+  libs:            { path: lib/woods_testbed/slug.rb,                exemplar: WoodsTestbed::Slug,   min: 1 }
+  rake_tasks:      { path: lib/tasks/publishing.rake,                exemplar: null,                 min: 1 }
+  factories:       { path: spec/factories/articles.rb,               exemplar: null,                 min: 1 }
+  test_mappings:   { path: spec/models/article_spec.rb,              exemplar: null,                 min: 1 }
+  database_views:  { path: db/views/popular_articles_v02.sql,        exemplar: null,                 min: 1 }
+  scheduled_jobs:  { path: config/recurring.yml,                     exemplar: null,                 min: 1 }
+  caching:         { path: app/controllers/articles_controller.rb,   exemplar: null,                 min: 1 }
+  view_components: { path: app/components/article_card_component.rb, exemplar: ArticleCardComponent, min: 1 }
+  components:      { path: app/components/article_badge.rb,          exemplar: ArticleBadge,         min: 1 }
+  graphql:         { path: app/graphql/types/article_type.rb,        exemplar: null,                 min: 3 }
+  services:        { path: app/use_cases,                            exemplar: null,                 min: 2 }
+  concerns:        { path: app/models/concerns,                      exemplar: null,                 min: 3 }
+  poros:           { path: app/models/word_count.rb,                 exemplar: null,                 min: 1 }
+  state_machines:  { path: app/models/billing/payment.rb,            exemplar: null,                 min: 1 }
+  events:          { path: app/use_cases/publish_article.rb,         exemplar: null,                 min: 1 }
+  policies:        { path: app/policies/publishing_policy.rb,        exemplar: null,                 min: 1 }
+  pundit_policies: { path: app/policies/article_policy.rb,           exemplar: null,                 min: 1 }
+  mailers:         { path: app/mailers/author_mailer.rb,             exemplar: AuthorMailer,         min: 1 }
+
+# Two extractors both scan app/policies and discriminate on method shape, so the
+# kernel needs one file of each shape or one of the two types stays empty.
+policies:
+  - path: app/policies/article_policy.rb
+    class: ArticlePolicy
+    shape: pundit          # index? show? create? — matches PUNDIT_ACTIONS
+    expect_type: pundit_policy
+  - path: app/policies/publishing_policy.rb
+    class: PublishingPolicy
+    shape: decision        # allowed? eligible? — matches DECISION_METHOD_PATTERN
+    expect_type: policy
+
+# ── Types the kernel does not need to supply ──────────────────────────────
+# Recorded so a future reader doesn't go looking for kernel files that were
+# never meant to exist.
+supplied_by_framework:
+  - engine          # EngineExtractor finds the engines Rails itself mounts
+  - middleware      # the app's own middleware stack
+  - rails_source    # framework sources
+  - configuration   # BehavioralProfile over resolved config
+  - route           # config/routes.rb
+  - i18n            # config/locales/en.yml
+  - migration
+  - action_cable_channel
+
+# ── Naming rules for the generated tree ───────────────────────────────────
+# The generator multiplies the kernel. Everything it emits carries this prefix
+# so generated units can never collide with kernel units — the same trick the
+# gem's #164 differential harness uses to sidestep the known identifier
+# collision (B-062).
+generated:
+  class_prefix: Gen
+  model_namespace: Gen
+  paths:
+    - app/generated
+    - db/generated
