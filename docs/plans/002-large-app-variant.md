@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–2 done, see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–4 done, see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -193,6 +193,42 @@ is one Dockerfile edit plus an empty `ca-bundle.crt` placeholder each.
   warning". `lib/tasks/woods.rake` now says that reasoning was wrong — the wait
   is generous and the failure explicit, via `WOODS_LOCK_WAIT`. Worth a one-line
   fix in the gem repo.
+
+### 1.7 A gem bug found by building the kernel (rung 4)
+
+`StateMachineExtractor#detect_class_name` returns the **innermost** class name,
+so `module Billing; class Payment` produces the unit identifier
+`Payment::aasm` rather than `Billing::Payment::aasm`.
+
+Consequences: every namespaced model with a state machine is misnamed in the
+index, and two same-named classes in different namespaces (`Billing::Payment`
+and `Legacy::Payment`) would collide on a single identifier — which is the
+already-known B-062 collapse, reached by a second route.
+
+Found because the kernel deliberately puts its state machine on a **namespaced**
+STI base. A flat fixture would never have surfaced it, which is the argument for
+the kernel's structural variety in miniature.
+
+Recorded in `kernel_contract.yml` under `known_gem_issues` so the conformance
+gate reports it without counting it as a kernel failure, and without the
+contract encoding wrong behaviour as expected. Delete the entry when the gem is
+fixed. **Not yet filed against `lost-in-the/woods`.**
+
+### 1.8 One thing that looked like a gem bug and was not
+
+STI subclasses (`Billing::CardPayment`, `Billing::BankPayment`) were discovered
+by `discoverable_classes` but silently dropped by `extract_all` — the exact
+shape of a full-vs-incremental divergence, and initially recorded as one.
+
+It was not. `table_exists?` was false because the variant's development database
+still held the *scaffold's* tables: the kernel's migrations reused the
+scaffold's version numbers (`20240101000001`), so `schema_migrations` reported
+them as already applied and `db:prepare` did nothing. Renumbering past the old
+versions and rebuilding fixed it, and the STI assertions went green.
+
+Worth recording for two reasons: reusing a migration version is a silent
+footgun that presents as an extraction bug, and the diagnosis was slowed by
+having redirected `db:prepare` output to `/dev/null`.
 
 ---
 

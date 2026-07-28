@@ -157,6 +157,23 @@ policies:
     shape: decision        # allowed? eligible? — matches DECISION_METHOD_PATTERN
     expect_type: policy
 
+# ── Known gem issues ──────────────────────────────────────────────────────
+# Assertions that are correct but currently fail because of a bug in the gem
+# rather than a gap in the kernel. They are reported separately and do not fail
+# the gate — the contract keeps stating the *right* expectation, so the entry
+# can simply be deleted when the gem is fixed and the assertion starts passing.
+#
+# `matches` is a substring of the violation message.
+known_gem_issues:
+  - matches: "state machine on Billing::Payment"
+    reason: >-
+      StateMachineExtractor#detect_class_name returns the innermost class name,
+      so `module Billing; class Payment` yields the unit identifier
+      "Payment::aasm" instead of "Billing::Payment::aasm". Every namespaced
+      model with a state machine is misnamed, and two same-named classes in
+      different namespaces would collide on one identifier.
+    ref: woods — to be filed
+
 # ── Types the kernel does not need to supply ──────────────────────────────
 # Recorded so a future reader doesn't go looking for kernel files that were
 # never meant to exist.

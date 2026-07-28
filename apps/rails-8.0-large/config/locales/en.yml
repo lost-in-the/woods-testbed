@@ -1,5 +1,8 @@
 en:
-  hello: "Hello world"
-  accounts:
+  articles:
     index:
-      title: "Accounts"
+      title: "Articles"
+  billing:
+    invoices:
+      index:
+        title: "Invoices"

@@ -287,6 +287,22 @@ Array(contract['policies']).each do |policy|
                         'method names still match the extractor pattern')
 end
 
+# ── Partition off known gem issues ────────────────────────────────────────
+# A violation matching a known_gem_issues entry is real but not the kernel's
+# fault. Reporting it separately keeps the gate meaningful — it can go green on
+# what the kernel controls — without hiding the bug or letting the contract
+# encode wrong behaviour as expected.
+known_specs = Array(contract['known_gem_issues'])
+known_hits  = []
+
+violations.reject! do |v|
+  spec = known_specs.find { |k| v.include?(k['matches'].to_s) }
+  next false unless spec
+
+  known_hits << [v, spec]
+  true
+end
+
 # ── Report ────────────────────────────────────────────────────────────────
 puts '=== Kernel contract conformance ==='
 puts "Variant:  #{Rails.application.class.module_parent_name} (#{Rails.root})"
@@ -295,8 +311,19 @@ puts "Index:    #{INDEX_DIR} (#{manifest['total_units']} units)"
 puts "Checks:   #{checks}"
 puts
 
+unless known_hits.empty?
+  puts "KNOWN GEM ISSUES  #{known_hits.size} (not counted against the gate):"
+  known_hits.each do |(message, spec)|
+    puts "  ~ #{message}"
+    puts "      #{spec['reason'].to_s.strip.gsub(/\s+/, ' ')}"
+    puts "      ref: #{spec['ref']}"
+  end
+  puts
+end
+
 if violations.empty?
-  puts "PASS  all #{checks} contract assertions hold."
+  puts "PASS  all #{checks} contract assertions hold " \
+       "(#{known_hits.size} known gem issue(s) excluded)."
   exit 0
 end
 

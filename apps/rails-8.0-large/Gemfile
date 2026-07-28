@@ -13,3 +13,19 @@ gem "bootsnap", ">= 1.18.0", require: false
 
 # Woods gem — bind-mounted by the testbed compose file.
 gem "woods", path: "/woods-gem"
+
+# ── Kernel dependencies (see KERNEL_CONTRACT.md) ──────────────────────────
+# Added in one batch rather than per rung: every Gemfile change costs a
+# bundle install, and behind an intercepting proxy that install needs the
+# ccr overlay. One boot beats four. Each of these is inert until the kernel
+# file that uses it exists.
+gem "aasm"                      # state_machine units
+gem "pundit"                    # pundit_policy units
+gem "view_component"            # view_component units
+gem "phlex-rails"               # component units
+gem "scenic"                    # database_view units (db/views/*.sql)
+
+group :development, :test do
+  gem "rspec-rails"             # test_mapping units (spec/**/*_spec.rb)
+  gem "factory_bot_rails"       # factory units (spec/factories/*.rb)
+end
