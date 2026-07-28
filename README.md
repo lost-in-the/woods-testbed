@@ -47,19 +47,35 @@ laptop and both look like hard failures if you don't know them.
 **1. The Docker daemon isn't running.** The `docker` CLI and the compose plugin
 are installed, but there is no daemon and no `/var/run/docker.sock`, so the
 first command fails with `Cannot connect to the Docker daemon` — which reads
-like Docker is unavailable. It isn't. Start it:
+like Docker is unavailable. It isn't. Start it with `bin/bootstrap_docker.sh`
+(idempotent, safe at the top of any script).
+
+**2. Containers can't reach the network the way the host does.** The session's
+egress proxy re-terminates TLS and listens on `127.0.0.1` only, so a container
+on the default bridge gets a certificate error from `gem install` and a
+connection refused from `bundle install`. Both look like a broken network; both
+are fixable.
+
+Use the wrapper instead of `docker compose` directly — it starts the daemon,
+installs the CA into the image, and puts the container in the host network
+namespace:
 
 ```bash
-bin/bootstrap_docker.sh      # idempotent; safe at the top of any script
-docker compose up -d rails-8.0
+bin/ccr_compose.sh build rails-8.0-large
+bin/ccr_compose.sh up -d rails-8.0-large
+docker exec woods-testbed-rails-8.0-large bash -lc 'cd /app && bin/rails woods:extract'
 ```
 
-**2. `HTTPS_PROXY` is set**, so `curl` to a container on `127.0.0.1` is sent to
-the proxy and fails confusingly. Bypass it for local ports:
+On a laptop the wrapper detects no proxy and passes straight through to
+`docker compose`, so it is safe to use everywhere.
 
-```bash
-curl --noproxy '*' http://127.0.0.1:3010/
-```
+Two caveats under the overlay: `network_mode: host` **discards `ports:`**, so
+the app binds directly on the host at 3000 and variants can't run side by side;
+and `curl` to a container needs `--noproxy '*'` or it is sent to the proxy.
+
+> Currently only `rails-8.0-large` carries the CA layer in its Dockerfile. The
+> other three variants still fail to build behind the proxy — see §1.5 of
+> [`docs/plans/002-large-app-variant.md`](docs/plans/002-large-app-variant.md).
 
 Image pulls through the proxy work normally — no extra configuration needed.
 

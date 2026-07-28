@@ -1,0 +1,41 @@
+# Compose overlay for Claude Code web/app sessions (and any environment behind
+# an intercepting HTTPS proxy).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ccr.yml up -d rails-8.0-large
+#
+# or just use bin/ccr_compose.sh, which adds both -f flags for you and only
+# applies this overlay when a proxy is actually detected.
+#
+# Two problems it solves, both of which look like "the network is broken":
+#
+#   1. The session's egress proxy listens on 127.0.0.1 only, so a container on
+#      the default bridge cannot reach it — `bundle install` fails with a
+#      connection refused to 172.17.0.1. network_mode: host puts the container
+#      in the host's network namespace, where 127.0.0.1:PORT resolves.
+#   2. TLS is re-terminated at the proxy, so the container must trust the CA
+#      bundle. The image installs it at build time (see each Dockerfile's
+#      optional ca-bundle.crt layer); these env vars point Ruby, bundler and
+#      RubyGems at the installed store.
+#
+# Cost of network_mode: host — `ports:` no longer applies, so the app binds
+# straight onto the host at 3000 and variants can no longer run side by side.
+# That is fine for a session working one variant at a time, and it is why this
+# is an opt-in overlay rather than the default.
+
+x-ccr-env: &ccr-env
+  https_proxy: ${HTTPS_PROXY:-}
+  HTTPS_PROXY: ${HTTPS_PROXY:-}
+  # Bundler reads HTTP_PROXY rather than HTTPS_PROXY. The proxy answers CONNECT
+  # for https:// targets either way, so pointing both at it is what makes
+  # `bundle install` work.
+  http_proxy: ${HTTPS_PROXY:-}
+  HTTP_PROXY: ${HTTPS_PROXY:-}
+  no_proxy: localhost,127.0.0.1,::1
+  NO_PROXY: localhost,127.0.0.1,::1
+  SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+  BUNDLE_SSL_CA_CERT: /etc/ssl/certs/ca-certificates.crt
+
+services:
+  rails-8.0-large:
+    network_mode: host
+    environment: *ccr-env

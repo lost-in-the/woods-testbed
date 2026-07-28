@@ -69,6 +69,24 @@ services:
     environment:
       <<: *common-env
 
+  # Scale variant (#2): large synthetic app for benchmarking incremental
+  # latency, whole-app re-run cost, and daemon memory. Rails 8.0 only — it
+  # exists to measure scale, not version behaviour.
+  rails-8.0-large:
+    build:
+      context: ./apps/rails-8.0-large
+    image: woods-testbed-rails-8.0-large
+    container_name: woods-testbed-rails-8.0-large
+    ports:
+      - "${RAILS_8_LARGE_PORT:-3013}:3000"
+    volumes:
+      - ./apps/rails-8.0-large:/app
+      - ./scripts:/app/script/shared:ro
+      - ${WOODS_GEM_PATH:-../woods}:/woods-gem:ro
+      - bundle-rails-8-large:/bundle
+    environment:
+      <<: *common-env
+
 volumes:
   bundle-rails-8:
     name: woods-testbed-bundle-rails-8
@@ -76,3 +94,5 @@ volumes:
     name: woods-testbed-bundle-rails-7-2
   bundle-rails-6-0:
     name: woods-testbed-bundle-rails-6-0
+  bundle-rails-8-large:
+    name: woods-testbed-bundle-rails-8-large

@@ -2,27 +2,32 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **proposed** — investigation complete, nothing implemented yet.
+Status: **in progress** — rungs 1–2 done, see [`002-loop.md`](002-loop.md).
 
 ---
 
 ## TL;DR
 
-Four findings changed the shape of the answer:
+Five findings changed the shape of the answer:
 
 1. **The candidate source is a dead end.** `JetBrains/sample_rails_app` *is* the
    Rails Tutorial sample app — the same codebase `apps/rails-8.0` and
    `apps/rails-7.2` are already forks of. Vendoring it adds roughly zero units.
    Go synthetic, which #2 already names as the legitimate alternative.
 2. **Type coverage is a bigger hole than size.** The gem produces **34 unit
-   types**; the existing variants exercise **13**. Twenty types have never run
+   types**; the existing variants exercise **14**. Twenty types have never run
    against a booted app anywhere except the gem's own `spec/dummy`. Fan-out
    measurement and type coverage want the same new variant, so build one thing.
 3. **Docker works inside a Claude Code web session** — verified empirically in
    this one, see [Appendix A](#appendix-a-container-feasibility-measured-not-assumed).
    It needs a documented bootstrap (`dockerd` is not running at session start),
    not a different architecture.
-4. **The embedding path has no testbed coverage at all**, and `rake woods:embed`
+4. **But the testbed could not actually be *built* in one** until rung 2 fixed
+   it (§1.5): container builds don't trust the egress CA, and the proxy is
+   loopback-only so containers can't reach it. Both present as "the network is
+   broken". This is the single most important finding for the question "can an
+   agent on the web build and test features fully?"
+5. **The embedding path has no testbed coverage at all**, and `rake woods:embed`
    cannot be driven without a live OpenAI or Ollama endpoint. That is a gem-side
    gap (`Builder`), not just a testbed gap.
 
@@ -53,9 +58,15 @@ copy would give us a third fork of a tree we already have twice.
 
 `IndexReader::TYPE_DIRS` lists 34 type directories. Against `apps/rails-8.0`:
 
-| Covered (13) | Zero coverage (20) |
+| Covered (14) | Zero coverage (20) |
 |---|---|
-| `models`, `controllers`, `jobs`, `mailers`, `routes`, `middleware`, `i18n`, `configurations`, `view_templates`, `migrations`, `action_cable_channels`, `test_mappings`, `rails_source` | `graphql`, `components` (Phlex), `view_components`, `services`, `serializers`, `managers`, `policies`, `validators`, `concerns`, `pundit_policies`, `engines`, `scheduled_jobs`, `rake_tasks`, `state_machines`, `events`, `decorators`, `database_views`, `caching`, `factories`, `libs`, `poros` |
+| `models`, `controllers`, `jobs`, `mailers`, `routes`, `middleware`, `i18n`, `configurations`, `engines`, `view_templates`, `migrations`, `action_cable_channels`, `test_mappings`, `rails_source` | `graphql`, `components` (Phlex), `view_components`, `services`, `serializers`, `managers`, `policies`, `validators`, `concerns`, `pundit_policies`, `scheduled_jobs`, `rake_tasks`, `state_machines`, `events`, `decorators`, `database_views`, `caching`, `factories`, `libs`, `poros` |
+
+> **Corrected at rung 2, from measurement.** This table first listed `engines`
+> as uncovered. The rung-2 scaffold extracts **2 engine units with no in-repo
+> engine at all** — `EngineExtractor` finds the engines Rails itself mounts. So
+> `engines` needs nothing from the kernel, and the covered count is 14, not 13.
+> The "twenty uncovered" headline is unchanged.
 
 Concretely, the variant has no `app/models/concerns/`, no
 `app/controllers/concerns/`, no `lib/`, no `app/services/`, no cache calls
@@ -110,13 +121,75 @@ requirement that "a number from six months ago is comparable to one from today"
 has no enforcement point. Benchmark numbers that only ever run by hand drift
 into folklore.
 
-### 1.5 Two small documentation drifts found in passing
+### 1.5 The testbed could not be built in a web session at all (fixed at rung 2)
+
+Discovered by rung 2 failing, and more consequential than anything else here for
+"can an agent on the web build and test this?" — the answer was **no**, for two
+reasons that both present as "the network is broken":
+
+1. **Build containers don't trust the egress CA.** `gem install bundler` fails
+   with `self-signed certificate in certificate chain` naming the session's
+   egress gateway CA. Nothing in the image trusts it.
+2. **The proxy listens on 127.0.0.1 only.** A container on the default bridge
+   gets `connection refused` reaching `172.17.0.1`, so even with the CA trusted,
+   `bundle install` cannot fetch. Verified directly: a busybox `wget` from a
+   container to the host gateway is refused.
+
+Neither is discoverable from the error messages, and both look like the
+environment simply can't run Docker.
+
+Fixed by `bin/ccr_compose.sh` + `docker-compose.ccr.yml`: build with
+`--network host`, install the CA in an early image layer, and run with
+`network_mode: host` so the container shares the namespace where the proxy is
+reachable. On a laptop the wrapper detects no proxy and passes straight through
+to `docker compose`, so the normal path is untouched.
+
+Two consequences worth stating plainly:
+
+- **`bundle install` has to happen at container start, not build time**, because
+  the Gemfile carries `gem "woods", path: "/woods-gem"` and that path only
+  exists as a runtime volume mount. So the *running* container needs proxy
+  access, not just the build.
+- **`network_mode: host` discards `ports:`**, so variants can't run side by side
+  under the overlay. Fine for a session working one variant at a time, and the
+  reason the overlay is opt-in.
+
+**Follow-up (not done here, per the append-don't-absorb rule):** only
+`apps/rails-8.0-large/Dockerfile` has the CA layer. The other three variants
+still can't build in a web session. The wrapper is already generic — retrofit
+is one Dockerfile edit plus an empty `ca-bundle.crt` placeholder each.
+
+### 1.6 Two small documentation drifts found in passing
 
 - This README's Layout section lists a `share/` directory that does not exist.
 - The gem's CLAUDE.md says a manual rake run "wait[s] 30s then proceed[s] with a
   warning". `lib/tasks/woods.rake` now says that reasoning was wrong — the wait
   is generous and the failure explicit, via `WOODS_LOCK_WAIT`. Worth a one-line
   fix in the gem repo.
+
+---
+
+## Measured baseline (rung 2)
+
+`apps/rails-8.0-large` scaffold, before any kernel content. Recorded so the
+kernel's and generator's effect is measurable against a known floor.
+
+| | |
+|---|---|
+| Rails / Ruby | 8.0.5 / 3.3.1 |
+| Total units | **149** |
+| of which `rails_source` | 120 (81%) — i.e. only **29 units** are app code |
+| Non-zero types | 10 of 34 |
+
+Per type: `models` 2, `controllers` 1, `jobs` 1, `routes` 10, `middleware` 1,
+`i18n` 1, `configurations` 4, `engines` 2, `view_templates` 5, `migrations` 2,
+`rails_source` 120. Everything else zero.
+
+That `rails_source` is 81% of the index at this size is itself worth noting for
+the benchmark design: the whole-app re-run percentage in finding 16 is a
+fraction of the *whole* index, so a variant whose index is mostly framework
+source would understate it. The generator has to move app-code units by enough
+that `rails_source` becomes a rounding error.
 
 ---
 
