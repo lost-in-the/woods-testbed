@@ -160,7 +160,7 @@ comparable. Scale is a knob; CI uses a smaller value.
 
 ### Phase 0 — Foundations (unblocks everything else)
 
-**0a. Container bootstrap script.** `scripts/bootstrap_docker.sh` — starts
+**0a. Container bootstrap script.** `bin/bootstrap_docker.sh` — starts
 `dockerd`, waits for the socket, prints readiness. Documented in the README with
 the web-session caveat from Appendix A. Without this, an agent on the web/app
 concludes Docker is unavailable and stops. This is the single highest-leverage
@@ -378,7 +378,7 @@ Two gotchas worth writing into the README:
 
 1. **`dockerd` must be started by hand.** The socket is absent at session start,
    so `docker ps` fails with a message that reads like Docker is unavailable. It
-   is not. This is what `scripts/bootstrap_docker.sh` exists to fix.
+   is not. This is what `bin/bootstrap_docker.sh` exists to fix.
 2. **`HTTPS_PROXY` is set**, so `curl` to a container on `127.0.0.1` needs
    `--noproxy '*'` or it goes to the proxy and fails confusingly.
 

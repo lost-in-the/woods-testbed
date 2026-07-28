@@ -28,7 +28,7 @@ gated by a command that returns an exit code rather than an opinion.
 
 | # | Slice | Verification gate |
 |---|---|---|
-| 1 | Container bootstrap + README fixes (Phase 0a, 0c) | `scripts/bootstrap_docker.sh && docker ps` exits 0 |
+| 1 | Container bootstrap + README fixes (Phase 0a, 0c) | `bin/bootstrap_docker.sh && docker ps` exits 0 |
 | 2 | `rails-8.0-large` scaffold — boots, extracts, validates | `woods:extract && woods:validate` green in-container |
 | 3 | Naming contract for the kernel (see below) | File exists; reviewed by me before slice 4 starts |
 | 4–7 | Kernel type families, ~5 types per iteration | `woods_type_coverage_smoke.rb` — covered-type count strictly increases |

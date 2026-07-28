@@ -39,21 +39,53 @@ directory, edit the Gemfile pin, add a new service to
 - Docker + Docker Compose (v2)
 - A local checkout of the [woods gem](https://github.com/lost-in-the/woods)
 
+### Running in a Claude Code web/app session
+
+The variants work in a remote Claude Code session, but two things differ from a
+laptop and both look like hard failures if you don't know them.
+
+**1. The Docker daemon isn't running.** The `docker` CLI and the compose plugin
+are installed, but there is no daemon and no `/var/run/docker.sock`, so the
+first command fails with `Cannot connect to the Docker daemon` — which reads
+like Docker is unavailable. It isn't. Start it:
+
+```bash
+bin/bootstrap_docker.sh      # idempotent; safe at the top of any script
+docker compose up -d rails-8.0
+```
+
+**2. `HTTPS_PROXY` is set**, so `curl` to a container on `127.0.0.1` is sent to
+the proxy and fails confusingly. Bypass it for local ports:
+
+```bash
+curl --noproxy '*' http://127.0.0.1:3010/
+```
+
+Image pulls through the proxy work normally — no extra configuration needed.
+
 ## Layout
 
 ```
 woods-testbed/
 ├── apps/
 │   ├── rails-8.0/        Rails 8 variant (tutorial sample app)
-│   └── rails-7.2/        Rails 7.2 variant
+│   ├── rails-7.2/        Rails 7.2 variant
+│   └── rails-6.0/        Rails 6.0 variant (supported floor, minimal)
+├── bin/                  Host-side tooling — runs on your machine, not in a container
+│   └── bootstrap_docker.sh              # start the Docker daemon if it isn't running
+├── docs/
+│   └── plans/            Design + implementation plans, one per issue
 ├── scripts/              Shared smoke scripts (mounted at /app/script/shared)
 │   ├── woods_smoke.rb
 │   ├── woods_credentials_smoke.rb
 │   ├── woods_worktree_smoke.rb          # git provenance in worktrees (#137)
 │   └── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
-├── share/                Shared snippets (initializers, seeds) referenced by apps
 └── docker-compose.yml
 ```
+
+Two directories, two audiences: everything in `scripts/` runs **inside** a
+container via `bin/rails runner script/shared/…`, and everything in `bin/` runs
+**on the host**. The read-only bind mount only covers `scripts/`.
 
 ## Quick start
 
