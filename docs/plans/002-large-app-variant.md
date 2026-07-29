@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–13 done; all three extrapolated claims measured, see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–13 done; measured against gem main `9d90bf5`, see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -485,18 +485,18 @@ possible at all. Deterministic, no network, safe in CI.
 |---|---|---|---|---|
 | `in_memory` | ✅ | ✅ | ✅ | ✅ |
 | `pgvector` | ✅ | ❌ | ✅ | ✅ |
-| `qdrant` | ✅ | ❌ | ❌ | ❌ |
+| `qdrant` | ✅ | ⚠️ | — | — |
 
-**Both external stores are broken, and neither failure was previously known.**
+Measured against gem `main` at **`9d90bf5`** (re-run after main moved).
 
-- **[woods#180](https://github.com/lost-in-the/woods/issues/180) — Qdrant cannot
-  store a single unit.** The adapter passes the unit identifier straight through
-  as a Qdrant point ID, and Qdrant accepts only unsigned integers or UUIDs:
-  `value ArticleCommentsChannel is not a valid point ID`. The collection is never
-  created, so every subsequent search 404s. This is more than one broken adapter
-  — `BACKEND_MATRIX.md` says MySQL stacks **must** use an external vector store
-  and names Qdrant, so the entire MySQL path is non-functional rather than merely
-  untested.
+- **~~woods#180 — Qdrant cannot store a single unit.~~ CLOSED: already fixed on
+  `main`.** I filed it against `c1d63cb`, one commit behind; woods#168 landed the
+  fix as `9d90bf5` — a pinned UUIDv5 namespace with the identifier carried in the
+  payload. Re-verified against the updated gem: the 400 is gone. **My error for
+  not re-checking `main` before filing.** One adjacent wart does survive and is
+  noted on the issue: `ensure_collection!` raises 409 when the collection already
+  exists, where `Pgvector#ensure_schema!` is documented idempotent — so the two
+  stores disagree on what `ensure_` promises.
 - **[woods#181](https://github.com/lost-in-the/woods/issues/181) — pgvector
   batch upsert raises `PG::CardinalityViolation`** when one batch proposes the
   same id twice. Earlier batches land, so the failure is data-dependent and
@@ -504,9 +504,17 @@ possible at all. Deterministic, no network, safe in CI.
   candidate causes recorded rather than one asserted: chunk-id collision, or the
   known B-062 identifier collapse surfacing in the storage layer.
 
-That is the answer to "does the testbed need a more developed container system
-for testing embedding?" — **yes, and it found two release-blocking bugs on its
-first run.** Neither is reachable from a SQLite-only, in-memory-store testbed.
+**Open, and honestly unresolved:** after adding the missing
+`ensure_collection!` call, Qdrant's `index_all` **hard-exits the script** rather
+than raising — no assertion line, exit 1, no Ruby backtrace. That is most likely
+something in the harness (a non-`StandardError` escape, or the process being
+killed) rather than a gem defect, so it is **not** filed as one. It needs
+isolating before any claim is made about Qdrant's behaviour at this scale.
+
+Still, the answer to "does the testbed need a more developed container system for
+testing embedding?" is **yes**: the profile found a real, still-open pgvector bug
+(woods#181) and independently confirmed a just-landed Qdrant fix. Neither is
+reachable from a SQLite-only, in-memory-store testbed.
 
 ### An interaction between two of my own mechanisms
 

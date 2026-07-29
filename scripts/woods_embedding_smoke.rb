@@ -139,11 +139,24 @@ end
 if reachable?(QDRANT_HOST, QDRANT_PORT)
   stores['qdrant'] = lambda do
     require 'woods/storage/qdrant'
-    Woods::Storage::VectorStore::Qdrant.new(
+    store = Woods::Storage::VectorStore::Qdrant.new(
       url: "http://#{QDRANT_HOST}:#{QDRANT_PORT}",
       collection: 'woods_testbed_smoke',
       dimensions: PROVIDER.dimensions
     )
+    # Qdrant collections are not created implicitly on first upsert — the
+    # counterpart to pgvector's ensure_schema!. Omitting it 404s every call.
+    #
+    # But unlike Pgvector#ensure_schema! (documented "safe to call multiple
+    # times (uses IF NOT EXISTS)"), this one raises 409 when the collection
+    # already exists — so an `ensure_`-named method is not idempotent. Tolerated
+    # here so a second run of this script works; reported upstream.
+    begin
+      store.ensure_collection!(dimensions: PROVIDER.dimensions)
+    rescue Woods::Error => e
+      raise unless e.message.include?('already exists')
+    end
+    store
   end
 else
   puts "SKIP  qdrant — nothing listening on #{QDRANT_HOST}:#{QDRANT_PORT} " \
