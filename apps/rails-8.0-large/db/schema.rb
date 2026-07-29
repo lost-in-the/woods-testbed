@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_01_01_000002) do
+ActiveRecord::Schema[8.0].define(version: 2026_02_01_000001) do
   create_table "article_tags", force: :cascade do |t|
     t.integer "article_id", null: false
     t.integer "tag_id", null: false
@@ -85,6 +85,22 @@ ActiveRecord::Schema[8.0].define(version: 2026_01_01_000002) do
     t.index ["author_id"], name: "index_comments_on_author_id"
   end
 
+  create_table "gen_hubs", force: :cascade do |t|
+    t.string "name", null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "gen_records", force: :cascade do |t|
+    t.integer "hub_id"
+    t.string "name", null: false
+    t.datetime "archived_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["hub_id"], name: "index_gen_records_on_hub_id"
+  end
+
   create_table "tags", force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
@@ -100,3 +116,4 @@ ActiveRecord::Schema[8.0].define(version: 2026_01_01_000002) do
   add_foreign_key "billing_payments", "billing_invoices", column: "invoice_id"
   add_foreign_key "comments", "articles"
   add_foreign_key "comments", "authors"
+end

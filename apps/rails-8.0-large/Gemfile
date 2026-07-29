@@ -23,7 +23,11 @@ gem "aasm"                      # state_machine units
 gem "pundit"                    # pundit_policy units
 gem "view_component"            # view_component units
 gem "phlex-rails"               # component units
-gem "scenic"                    # database_view units (db/views/*.sql)
+# NOT scenic. It hooks the schema dump with PostgreSQL-only queries (pg_class,
+# pg_get_viewdef) and takes db:prepare down on SQLite with
+# "no such table: pg_class". DatabaseViewExtractor reads db/views/*.sql
+# statically and never needs the gem loaded, so the database_view units are
+# produced either way — the dependency bought nothing and cost a boot.
 # graphql_type / graphql_mutation / graphql_resolver units.
 #
 # GraphQLExtractor's file pass is deliberately NOT gated on this gem being

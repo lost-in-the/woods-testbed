@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–7 done (kernel complete, 34/34 types), see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–9 done (kernel 34/34; generator calibrated), see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -336,6 +336,57 @@ now pinned by a fixture:
 - **`policy` and `pundit_policy` both scan `app/policies`** and one class can be
   both, so the conformance script tracks a *set* of type directories per
   identifier rather than one.
+
+---
+
+## Scale calibration (rung 9, measured)
+
+Two data points, because one cannot establish a slope. The kernel contributes a
+fixed 91 app-code units, so the figure that matters is the **marginal** rate per
+generated family, not units divided by scale.
+
+| Scale | Families | Total units | App-code units | Marginal units/family |
+|---|---|---|---|---|
+| `small` | 20 | 464 | 265 | 8.70 |
+| `medium` | 200 | 1,940 | 1,741 | 8.25 |
+
+Projection at the committed `large` preset:
+
+| Families | App-code units | Total units |
+|---|---|---|
+| 500 | ~4,216 | ~4,415 |
+| 700 | ~5,866 | ~6,065 |
+| **875** | **~7,309** | **~7,508** |
+
+`large = 875` therefore lands inside the 6,000–8,000 band and within ~3% of the
+~7,100-unit host behind #2's finding 16 — so the whole-app re-run percentage
+measured here is directly comparable. **No recalibration needed**; the preset
+stands as committed.
+
+Two side effects worth recording:
+
+- **The `rails_source` dilution problem solves itself with scale.** It was 81% of
+  the index at the scaffold and 68% after the kernel; at `medium` it is 10%, and
+  at `large` it projects to ~2.6%. The whole-app re-run percentage stops being
+  distorted by framework source without needing `include_framework_sources =
+  false`.
+- **Cold full extraction at `medium` (1,940 units) takes 7.8s** in-container.
+  That is the first real data point for rung 10's harness and suggests `large`
+  will be well under a minute.
+
+The contract gate stays green with the generated tree present at both scales —
+so the `Gen` prefix is doing its job and no generated identifier collides with a
+kernel one.
+
+### A dependency removed rather than added
+
+`scenic` was added in rung 4 "for realism" and had to come out: it hooks the
+schema dump with PostgreSQL-only queries (`pg_class`, `pg_get_viewdef`) and takes
+`db:prepare` down on SQLite with `no such table: pg_class`. `DatabaseViewExtractor`
+reads `db/views/*.sql` statically and never needs the gem, so `database_view`
+units are produced either way. The dependency bought nothing and cost a boot —
+and it is a concrete instance of the backend-agnostic problem the testbed exists
+to surface.
 
 ---
 
