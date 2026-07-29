@@ -282,19 +282,20 @@ benchmark reports is inflated by whatever the directory used to contain.
 ### The five known gem issues
 
 All found by building the kernel, all recorded in `kernel_contract.yml` with
-rationale, none yet filed against `lost-in-the/woods`:
+rationale, and all now filed against `lost-in-the/woods`:
 
 1. **`StateMachineExtractor#detect_class_name`** returns the innermost class
-   name — `Billing::Payment`'s machine is indexed as `Payment::aasm`.
+   name — `Billing::Payment`'s machine is indexed as `Payment::aasm`. → [woods#174](https://github.com/lost-in-the/woods/issues/174)
 2. **`ServiceExtractor`** does the same — `app/use_cases/billing/issue_invoice.rb`
    becomes `IssueInvoice`, not `Billing::IssueInvoice`. Same root cause, same
-   cross-namespace collision risk.
+   cross-namespace collision risk. → [woods#174](https://github.com/lost-in-the/woods/issues/174)
 3. **`ControllerExtractor#extract_included_concerns`** selects included modules
    by whether the module *name contains the string* `"Concern"`. An
    idiomatically named controller concern is never recorded, though its
-   `before_action` **is** picked up in `filters`.
+   `before_action` **is** picked up in `filters`. → [woods#175](https://github.com/lost-in-the/woods/issues/175)
 4. **Controller concern source is not inlined** the way model concern source is.
    Possibly by design; the gem's CLAUDE.md only ever claims it for models.
+   → [woods#175](https://github.com/lost-in-the/woods/issues/175) (second half)
 5. **`RakeTaskExtractor#parse_task_signature`** requires a leading colon on the
    task name, so the modern `task archive_stale: :environment` form — what most
    Rails apps write — yields no unit at all.
@@ -302,6 +303,22 @@ rationale, none yet filed against `lost-in-the/woods`:
 Three of the five (1, 2, 5) would be invisible to a flat, conventionally-named
 fixture. That is the argument for the kernel's structural variety, stated as
 evidence rather than as a hope.
+
+### Filed against the gem
+
+Every gem-side finding in this document now has an issue:
+
+| Issue | Finding | Where found |
+|---|---|---|
+| [woods#174](https://github.com/lost-in-the/woods/issues/174) | Namespace lost in class-name detection (`StateMachineExtractor`, `ServiceExtractor`) | rungs 4–5 |
+| [woods#175](https://github.com/lost-in-the/woods/issues/175) | Controller concerns never recorded — name-string matching; plus the inlining asymmetry | rung 5 |
+| [woods#176](https://github.com/lost-in-the/woods/issues/176) | `RakeTaskExtractor` misses `task name: :environment` | rung 6 |
+| [woods#177](https://github.com/lost-in-the/woods/issues/177) | Full extraction leaves orphaned unit files; counts over-report | rung 7 |
+| [woods#178](https://github.com/lost-in-the/woods/issues/178) | Embedding pipeline undrivable without a live provider; `woods:retrieve` hardcodes backends | §1.3 |
+| [woods#179](https://github.com/lost-in-the/woods/issues/179) | CLAUDE.md describes the superseded lock-wait behaviour | §1.6 |
+
+`kernel_contract.yml`'s `known_gem_issues` entries carry the issue numbers, so
+deleting an entry when its issue closes is the whole cleanup.
 
 ### Extractor conventions worth knowing
 

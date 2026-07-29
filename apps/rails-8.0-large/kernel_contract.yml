@@ -173,7 +173,7 @@ known_gem_issues:
       "Payment::aasm" instead of "Billing::Payment::aasm". Every namespaced
       model with a state machine is misnamed, and two same-named classes in
       different namespaces would collide on one identifier.
-    ref: woods — to be filed
+    ref: woods#174
   - matches: "concern RequiresAuthor"
     reason: >-
       ControllerExtractor#extract_included_concerns selects a controller's
@@ -185,7 +185,7 @@ known_gem_issues:
       app/controllers/concerns, or ActiveSupport::Concern ancestry, would be
       the reliable test. Separately, controller concern source is not inlined
       the way model concern source is; that part may be by design.
-    ref: woods — to be filed
+    ref: woods#175
   - matches: "service Billing::IssueInvoice"
     reason: >-
       ServiceExtractor names the unit from the innermost class name, so
@@ -193,7 +193,7 @@ known_gem_issues:
       rather than "Billing::IssueInvoice". Same root cause as the
       StateMachineExtractor entry above, and the same collision risk for two
       same-named services in different namespaces.
-    ref: woods — to be filed
+    ref: woods#174
   - matches: "type rake_tasks"
     reason: >-
       RakeTaskExtractor#parse_task_signature only matches task names written
@@ -203,7 +203,7 @@ known_gem_issues:
       parsed, so those tasks are missing from the index entirely. The kernel
       ships one task in each form so the type still has coverage while the gap
       keeps a live fixture.
-    ref: woods — to be filed
+    ref: woods#176
 
 # ── Types the kernel does not need to supply ──────────────────────────────
 # Recorded so a future reader doesn't go looking for kernel files that were
