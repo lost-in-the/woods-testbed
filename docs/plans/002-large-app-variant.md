@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–9 done (kernel 34/34; generator calibrated), see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–11 done (first measured numbers in hand), see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -387,6 +387,81 @@ reads `db/views/*.sql` statically and never needs the gem, so `database_view`
 units are produced either way. The dependency bought nothing and cost a boot —
 and it is a concrete instance of the backend-agnostic problem the testbed exists
 to surface.
+
+---
+
+## First measured numbers (rungs 10–11)
+
+`apps/rails-8.0-large` at `WOODS_GEN_SCALE=medium` — 1,940 units, 1,741 app-code.
+Ruby 3.3.1 / Rails 8.0.5, in-container, 5 reps per scenario.
+
+### Cold full extraction: 5,541 ms
+
+| Phase | ms |
+|---|---|
+| `write_and_publish` | **2,925** |
+| `extract` | **2,556** |
+| `graph_analysis` (PageRank + structural) | 27.8 |
+| `dedupe` | 12.5 |
+| `git_enrich` | 10.6 |
+| `normalize` | 4.6 |
+| `dependents` | 4.3 |
+
+**This falsifies the working hypothesis.** #2 says the figure that matters is one
+"where PageRank and the dependents pass dominate rather than boot time". They do
+not — together they are **32 ms of 5,541**, six tenths of one percent. The cost
+is split almost evenly between extraction itself and **writing the output**,
+which on a large tree is dominated by `AtomicFile`'s fsync per unit file.
+
+So the optimisation target implied by the issue is the wrong one. Anyone tuning
+PageRank here would be tuning 0.5% of the runtime.
+
+### Incremental, per scenario
+
+| Scenario | p50 | p95 | Units written | % of index |
+|---|---|---|---|---|
+| controller | 274 ms | 341 ms | 6 | 0.3% |
+| model | 402 ms | 451 ms | 38 | 2.0% |
+| **routes** | **2,534 ms** | 2,830 ms | **1,036** | **53.4%** |
+| schema | 107 ms | 134 ms | 0 | 0.0% |
+
+**The routes number is finding 16, measured** — but read the shape, not just the
+size. The reviewer measured 24% of their index; this variant reports **53.4%**.
+The difference is composition, not a contradiction: the generated tree is
+deliberately dense in controllers and view templates, which are exactly the
+`ROUTE_CONSUMER_EXTRACTORS` types, so the fan-out reaches a larger share here
+than in a real app with more models per controller. **A number quoted from this
+variant should carry its scale and its shape**, which is why the harness embeds
+the generator manifest in every result.
+
+`schema` writing **0 units** is correct, not a bug: `ReloadPolicy` classifies
+`db/schema.rb` as `:restart`, and a plain `extract_changed` on it touches nothing
+because the models are class-based and their constants have not changed. The
+daemon's restart path is rung 13's business.
+
+### RSS
+
+79.6 MB before, 167.7 MB after a full extraction plus 20 incremental cycles —
+**+88 MB**, on a 1,940-unit tree. Note this is one process doing repeated
+extractions, not the steady-state daemon footprint the six-worktree claim is
+about; that is rung 13.
+
+### Two harness bugs worth recording
+
+- **`extract_changed` returns a flat Array of identifiers**, not a Hash keyed by
+  type the way `extract_all`'s result is. The first version of the harness summed
+  it as a Hash and reported **0 units written for every scenario** — silently
+  zeroing the single most important number. Caught only because 0.0% across the
+  board was obviously wrong.
+- The phase label `finalize` was renamed `write_and_publish` once the numbers
+  showed what it actually contained. A misleading label on a 2.9-second phase
+  would have sent the next reader looking in the wrong place.
+
+### Still to measure
+
+`large` scale (875 families, ~7,300 app-code units) has not been run yet — these
+are `medium` numbers. The acceptance criterion in #2 wants the large figures, so
+that run is the immediate next step.
 
 ---
 
