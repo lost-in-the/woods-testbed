@@ -37,6 +37,11 @@ gem "phlex-rails"               # component units
 # in this variant describe a degraded run. The gem-absent scenario is a separate
 # axis — see KERNEL_CONTRACT.md and woods B-066 / #167.
 gem "graphql"
+# pgvector round-trip in scripts/woods_embedding_smoke.rb. The gem's Pgvector
+# adapter wants an object responding to #execute and #quote — an ActiveRecord
+# connection, not a URL string — so the smoke script opens a secondary
+# connection to the backends-profile Postgres, which needs this driver.
+gem "pg", "~> 1.5"
 
 group :development, :test do
   gem "rspec-rails"             # test_mapping units (spec/**/*_spec.rb)

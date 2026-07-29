@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–11 done (first measured numbers in hand), see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–12 done (8 gem issues filed), see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -462,6 +462,73 @@ about; that is rung 13.
 `large` scale (875 families, ~7,300 app-code units) has not been run yet — these
 are `medium` numbers. The acceptance criterion in #2 wants the large figures, so
 that run is the immediate next step.
+
+---
+
+## Rung 12: the storage/embedding backends, and what they found
+
+`docker-compose.yml` gains a `backends` profile — `pgvector/pgvector:pg16`,
+`qdrant/qdrant:v1.12.1`, `mysql:8` — kept off the default `up` so day-to-day
+work stays fast. `scripts/woods_embedding_smoke.rb` round-trips the embedding
+pipeline through every store it can reach and skips, with a message, the ones it
+cannot.
+
+The provider is **defined inline in the script** rather than imported: the gem's
+`Provider::Fake` is stranded in `spec/support/` and `Builder` only knows
+`:openai`/`:ollama`, so this is the zero-gem-change path (woods#178 tracks
+fixing that). `Indexer` accepts `provider:` as a kwarg, which is what makes it
+possible at all. Deterministic, no network, safe in CI.
+
+### Results
+
+| Store | Constructs | Embeds | Searches | Ranks |
+|---|---|---|---|---|
+| `in_memory` | ✅ | ✅ | ✅ | ✅ |
+| `pgvector` | ✅ | ❌ | ✅ | ✅ |
+| `qdrant` | ✅ | ❌ | ❌ | ❌ |
+
+**Both external stores are broken, and neither failure was previously known.**
+
+- **[woods#180](https://github.com/lost-in-the/woods/issues/180) — Qdrant cannot
+  store a single unit.** The adapter passes the unit identifier straight through
+  as a Qdrant point ID, and Qdrant accepts only unsigned integers or UUIDs:
+  `value ArticleCommentsChannel is not a valid point ID`. The collection is never
+  created, so every subsequent search 404s. This is more than one broken adapter
+  — `BACKEND_MATRIX.md` says MySQL stacks **must** use an external vector store
+  and names Qdrant, so the entire MySQL path is non-functional rather than merely
+  untested.
+- **[woods#181](https://github.com/lost-in-the/woods/issues/181) — pgvector
+  batch upsert raises `PG::CardinalityViolation`** when one batch proposes the
+  same id twice. Earlier batches land, so the failure is data-dependent and
+  leaves the index *partially* embedded with no indication which id collided. Two
+  candidate causes recorded rather than one asserted: chunk-id collision, or the
+  known B-062 identifier collapse surfacing in the storage layer.
+
+That is the answer to "does the testbed need a more developed container system
+for testing embedding?" — **yes, and it found two release-blocking bugs on its
+first run.** Neither is reachable from a SQLite-only, in-memory-store testbed.
+
+### An interaction between two of my own mechanisms
+
+The `ccr` overlay uses `network_mode: host`, which takes the app **off the
+compose bridge** — so service-name resolution to `postgres`/`qdrant` stops
+working and the smoke script correctly reports both as unreachable. The two
+mechanisms are mutually exclusive.
+
+The working order is the one already documented: overlay for the build and the
+first boot, plain `docker compose up` thereafter. Only the plain path can reach
+the backends profile.
+
+### Also fixed in this rung
+
+- `Pgvector.new(connection:)` wants an object responding to `#execute` and
+  `#quote` — an **ActiveRecord connection**, not a URL string, which fails with
+  `undefined method 'quote' for an instance of String`. The smoke script opens a
+  secondary connection via an abstract class so the app's own SQLite connection
+  is untouched. `pg` added to the variant's Gemfile for it.
+- A dimension assertion I wrote was unrunnable: search results are a Struct with
+  an id and a score but no vector. Replaced with a ranking assertion, which is
+  the property the L2-normalised provider exists to make testable.
 
 ---
 

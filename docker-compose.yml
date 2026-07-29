@@ -87,6 +87,59 @@ services:
     environment:
       <<: *common-env
 
+  # ── Storage + embedding backends (opt-in) ────────────────────────────────
+  #
+  # Behind the `backends` profile so the default `docker compose up` stays fast:
+  #
+  #   docker compose --profile backends up -d postgres qdrant mysql
+  #
+  # These exist because the testbed ran SQLite only, so nothing exercised the
+  # gem's backend-agnostic claim end to end (woods-testbed#2 §1.3). Verified
+  # runnable in a Claude Code session — see the plan's Appendix A.
+  postgres:
+    profiles: [backends]
+    # pgvector's image, not plain postgres: the same container serves as the
+    # primary database AND the vector store, which is the whole point of the
+    # pgvector option.
+    image: pgvector/pgvector:pg16
+    container_name: woods-testbed-postgres
+    environment:
+      POSTGRES_PASSWORD: woods
+      POSTGRES_DB: woods_testbed
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  qdrant:
+    profiles: [backends]
+    image: qdrant/qdrant:v1.12.1
+    container_name: woods-testbed-qdrant
+    ports:
+      - "${QDRANT_PORT:-56333}:6333"
+
+  # MySQL is the other half of the backend-agnostic claim, and the more
+  # load-bearing half: MySQL has no pgvector equivalent, so a MySQL stack is
+  # *forced* down the external-vector-store path (Qdrant). A testbed that only
+  # ever runs PostgreSQL cannot catch a PostgreSQL-only assumption.
+  mysql:
+    profiles: [backends]
+    image: mysql:8
+    container_name: woods-testbed-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: woods
+      MYSQL_DATABASE: woods_testbed
+    ports:
+      - "${MYSQL_PORT:-53306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pwoods --silent"]
+      interval: 4s
+      timeout: 4s
+      retries: 25
+
 volumes:
   bundle-rails-8:
     name: woods-testbed-bundle-rails-8
