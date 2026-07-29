@@ -24,7 +24,8 @@
 
 set -euo pipefail
 
-readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT
 readonly CA_SOURCE="${CCR_CA_BUNDLE:-/root/.ccr/ca-bundle.crt}"
 
 log() { printf '%s\n' "$*" >&2; }
@@ -54,6 +55,7 @@ stage_ca_bundles() {
   done < <(ca_bundle_targets)
 }
 
+# shellcheck disable=SC2317  # reached via the EXIT trap, not a direct call
 restore_ca_placeholders() {
   local target
   while read -r target; do

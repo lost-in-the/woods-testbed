@@ -137,6 +137,18 @@ jobs:
           docker logs "$container" 2>&1 | tail -40
           exit 1
 
+      # Explicit, for every variant. Only rails-8.0-large's Dockerfile CMD runs
+      # db:prepare; the three legacy variants never do, so a fresh checkout has
+      # no tables at all. That broke woods_credentials_smoke ("no such table:
+      # credentials") and, more quietly, degraded extraction itself —
+      # ModelExtractor drops a model whose table_exists? is false, so those runs
+      # were measuring a partial index without saying so.
+      - name: Prepare the database
+        working-directory: woods-testbed
+        run: |
+          docker exec "woods-testbed-${{ matrix.variant }}" \
+            bash -lc 'cd /app && bin/rails db:prepare'
+
       # woods:clean first, deliberately: a full extraction overwrites unit files
       # but does not prune orphans, so a reused output directory over-reports
       # every count. See lost-in-the/woods#177.
@@ -162,6 +174,15 @@ jobs:
             docker exec "$container" bash -lc "cd /app && bin/rails runner script/shared/$name" || status=1
           done
           exit $status
+
+      # Everything under tmp/woods was written by root inside the container and
+      # bind-mounted out, so the runner user cannot read it — both the coverage
+      # reporter and the artifact upload fail with EACCES without this. Invisible
+      # locally, where the developer is usually root already.
+      - name: Take ownership of the extracted index
+        if: always()
+        working-directory: woods-testbed
+        run: sudo chown -R "$(id -u):$(id -g)" "apps/${{ matrix.variant }}/tmp" || true
 
       - name: Report type coverage
         if: always()
