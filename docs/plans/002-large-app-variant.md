@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–12 done (8 gem issues filed), see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–13 done; all three extrapolated claims measured, see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -529,6 +529,58 @@ the backends profile.
 - A dimension assertion I wrote was unrunnable: search results are a Struct with
   an id and a score but no vector. Replaced with a ranking assertion, which is
   the property the L2-normalised provider exists to make testable.
+
+---
+
+## Rung 13: daemon at scale — all three claims now measured
+
+`scripts/woods_daemon_scale_smoke.rb`, at `medium` scale (1,940 units).
+
+### Why processes, not containers
+
+The gem's docs say six concurrently extracting booted apps "needs six processes
+and is not in CI", and the natural reading is six containers. **That is not what
+the constraint says.** `Rails.root` is a *process* singleton, not a container
+one — so six forks, each with its own output directory, satisfy it exactly. No
+compose orchestration, no port juggling, and no collision with the ccr overlay's
+host networking.
+
+This is why the claim was reachable here at all.
+
+### Per-daemon RSS, six worktrees
+
+| | |
+|---|---|
+| Parent (booted app, no extraction) | 83.3 MB |
+| Per worktree after 2 full extractions | 165.9 – 166.3 MB (mean **166.0**) |
+| Summed across six | 996.2 MB |
+
+**The gem's extrapolated figure was 72.1 MB per daemon**, measured on a fixture
+app. At 1,940 units it is **166 MB — 2.3× the extrapolation.** That is the
+correction the docs need, and it is exactly the kind of error extrapolating from
+a small host produces.
+
+Two honesty notes the script prints itself: forks share the parent heap
+copy-on-write, so the 996 MB sum is an **upper bound** and the mean is the
+per-daemon figure; and this measures repeated `Extractor` cycles, not a resident
+`Watch::Daemon` event loop, so it is the extraction footprint rather than idle
+steady state.
+
+### Bind-mount latency
+
+**723–824 ms** from file write to `generation.json` bump, on a **Linux** bind
+mount, and the generation demonstrably moved.
+
+The script prints a warning that this must not be quoted as the macOS figure.
+Docker Desktop's osxfs/gRPC-FUSE inotify behaviour is the actual open question
+in #2, and it **cannot** be obtained from a Linux container — that number needs a
+macOS host. Recording a Linux number as if it answered the macOS question would
+be worse than leaving the gap open.
+
+### One more of my own bugs
+
+`Woods::Generation` has no `#read` — it is `#current`. All six forks failed
+identically on the first run, which at least made it obvious rather than subtle.
 
 ---
 
