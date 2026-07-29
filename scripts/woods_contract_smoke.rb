@@ -92,7 +92,7 @@ end
 def load_unit(summary)
   return nil unless summary
 
-  stem = summary['identifier'].tr(':', '_').tr('/', '_')
+  stem = summary['identifier'].gsub(/[:.\/]/, '_')
   match = Dir[summary['dir'].join("#{stem}_*.json").to_s].first
   match ? JSON.parse(File.read(match)) : nil
 rescue JSON::ParserError
@@ -175,7 +175,9 @@ Array(contract['concerns']).each do |concern|
     unit = load_unit(summary)
     next violation(violations, "concern #{name}: includer #{includer} unit unreadable") if unit.nil?
 
-    inlined = Array(unit.dig('metadata', 'inlined_concerns')).map do |c|
+    declared = Array(unit.dig('metadata', 'inlined_concerns')) +
+               Array(unit.dig('metadata', 'included_concerns'))
+    inlined = declared.map do |c|
       c.is_a?(Hash) ? (c['name'] || c['identifier']).to_s : c.to_s
     end
 

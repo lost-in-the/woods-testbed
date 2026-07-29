@@ -173,6 +173,26 @@ known_gem_issues:
       model with a state machine is misnamed, and two same-named classes in
       different namespaces would collide on one identifier.
     ref: woods — to be filed
+  - matches: "concern RequiresAuthor"
+    reason: >-
+      ControllerExtractor#extract_included_concerns selects a controller's
+      included modules by whether the module NAME contains the string
+      "Concern"/"Concerns". An idiomatically named controller concern
+      (RequiresAuthor, Authenticatable, Paginatable) is therefore never
+      recorded — included_concerns comes back empty even though the concern is
+      included and its before_action IS detected in `filters`. Membership of
+      app/controllers/concerns, or ActiveSupport::Concern ancestry, would be
+      the reliable test. Separately, controller concern source is not inlined
+      the way model concern source is; that part may be by design.
+    ref: woods — to be filed
+  - matches: "service Billing::IssueInvoice"
+    reason: >-
+      ServiceExtractor names the unit from the innermost class name, so
+      app/use_cases/billing/issue_invoice.rb is indexed as "IssueInvoice"
+      rather than "Billing::IssueInvoice". Same root cause as the
+      StateMachineExtractor entry above, and the same collision risk for two
+      same-named services in different namespaces.
+    ref: woods — to be filed
 
 # ── Types the kernel does not need to supply ──────────────────────────────
 # Recorded so a future reader doesn't go looking for kernel files that were
