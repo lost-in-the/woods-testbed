@@ -24,6 +24,15 @@ gem "pundit"                    # pundit_policy units
 gem "view_component"            # view_component units
 gem "phlex-rails"               # component units
 gem "scenic"                    # database_view units (db/views/*.sql)
+# graphql_type / graphql_mutation / graphql_resolver units.
+#
+# GraphQLExtractor's file pass is deliberately NOT gated on this gem being
+# loaded (graphql_source_present?, not graphql_available?), so app/graphql is
+# indexed either way. It is installed here so eager_load doesn't hit a NameError
+# and fall back to per-directory loading, which would make every timing number
+# in this variant describe a degraded run. The gem-absent scenario is a separate
+# axis — see KERNEL_CONTRACT.md and woods B-066 / #167.
+gem "graphql"
 
 group :development, :test do
   gem "rspec-rails"             # test_mapping units (spec/**/*_spec.rb)

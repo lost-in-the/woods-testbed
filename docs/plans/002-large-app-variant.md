@@ -2,7 +2,7 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–4 done, see [`002-loop.md`](002-loop.md).
+Status: **in progress** — rungs 1–7 done (kernel complete, 34/34 types), see [`002-loop.md`](002-loop.md).
 
 ---
 
@@ -253,6 +253,72 @@ the benchmark design: the whole-app re-run percentage in finding 16 is a
 fraction of the *whole* index, so a variant whose index is mostly framework
 source would understate it. The generator has to move app-code units by enough
 that `rails_source` becomes a rounding error.
+
+---
+
+## Kernel complete (rungs 4–7)
+
+`apps/rails-8.0-large` after the kernel, before any generated tree:
+
+| | |
+|---|---|
+| Total units | 290 |
+| App-code units | 91 (was 29 at scaffold) |
+| `rails_source` | 199 — **68%**, down from 81% |
+| Types non-empty | **34 / 34** |
+| Contract assertions | 52, all passing |
+| Known gem issues | 5, partitioned off the gate |
+| `woods:validate` | clean |
+
+Every one of the 20 types that had never run against a booted app now does.
+
+**A note for the benchmark rung.** `woods:validate` initially reported five
+count mismatches (`models: expected 10, found 12`). Those were stale unit files
+from the scaffold era: **a full extraction overwrites unit files but does not
+prune orphans**, so an output directory that has seen an earlier, different app
+over-reports. `woods:clean` first, then extract, or every unit count the
+benchmark reports is inflated by whatever the directory used to contain.
+
+### The five known gem issues
+
+All found by building the kernel, all recorded in `kernel_contract.yml` with
+rationale, none yet filed against `lost-in-the/woods`:
+
+1. **`StateMachineExtractor#detect_class_name`** returns the innermost class
+   name — `Billing::Payment`'s machine is indexed as `Payment::aasm`.
+2. **`ServiceExtractor`** does the same — `app/use_cases/billing/issue_invoice.rb`
+   becomes `IssueInvoice`, not `Billing::IssueInvoice`. Same root cause, same
+   cross-namespace collision risk.
+3. **`ControllerExtractor#extract_included_concerns`** selects included modules
+   by whether the module *name contains the string* `"Concern"`. An
+   idiomatically named controller concern is never recorded, though its
+   `before_action` **is** picked up in `filters`.
+4. **Controller concern source is not inlined** the way model concern source is.
+   Possibly by design; the gem's CLAUDE.md only ever claims it for models.
+5. **`RakeTaskExtractor#parse_task_signature`** requires a leading colon on the
+   task name, so the modern `task archive_stale: :environment` form — what most
+   Rails apps write — yields no unit at all.
+
+Three of the five (1, 2, 5) would be invisible to a flat, conventionally-named
+fixture. That is the argument for the kernel's structural variety, stated as
+evidence rather than as a hope.
+
+### Extractor conventions worth knowing
+
+Not bugs — definitions that are simply narrower than their names suggest, each
+now pinned by a fixture:
+
+- **`manager`** means a *delegator*: `< SimpleDelegator`, `< DelegateClass(…)`,
+  or `include Delegator`. A service-shaped class in `app/managers` yields nothing.
+- **`serializer`** is recognised by shape, not directory — needs
+  `< ApplicationSerializer` / `< ActiveModel::Serializer` / an `attributes :`
+  DSL. A plain PORO in `app/serializers` yields nothing.
+- **`pundit_policy`** requires Pundit's `user`/`record` naming. Name the
+  constructor args `author`/`article` and the policy is invisible to that
+  extractor (it still registers as a plain `policy`).
+- **`policy` and `pundit_policy` both scan `app/policies`** and one class can be
+  both, so the conformance script tracks a *set* of type directories per
+  identifier rather than one.
 
 ---
 

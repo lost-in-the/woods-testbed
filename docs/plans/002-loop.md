@@ -31,7 +31,7 @@ gated by a command that returns an exit code rather than an opinion.
 | 1 | Container bootstrap + README fixes (Phase 0a, 0c) | `bin/bootstrap_docker.sh && docker ps` exits 0 |
 | 2 | `rails-8.0-large` scaffold — boots, extracts, validates | `woods:extract && woods:validate` green in-container |
 | 3 | Naming contract for the kernel (see below) | `woods_contract_smoke.rb` runs and reports a precise, non-empty violation list (exit 2) |
-| 4–7 | Kernel type families, ~5 types per iteration | `woods_type_coverage_smoke.rb` — covered-type count strictly increases |
+| 4–7 | Kernel type families | `woods_contract_smoke.rb` exit 0 — violations strictly decrease each iteration (62 → 36 → 22 → 0) |
 | 8 | CI workflow (Phase 0b) | Workflow run green on the branch |
 | 9 | Generator (Phase 2) | Generate twice → identical tree checksum; scale calibration recorded |
 | 10 | Benchmark harness (Phase 3) | Emits JSON containing every required key at `--scale small` |

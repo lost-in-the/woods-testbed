@@ -75,12 +75,19 @@ INDEX_DIR.children.select(&:directory?).each do |dir|
   next unless index_file.file?
 
   JSON.parse(index_file.read).each do |entry|
-    summaries[entry['identifier'].to_s] = {
-      'type_dir' => dir.basename.to_s,
-      'identifier' => entry['identifier'].to_s,
-      'file_path' => entry['file_path'].to_s,
-      'dir' => dir
-    }
+    id = entry['identifier'].to_s
+    existing = summaries[id]
+
+    if existing
+      existing['type_dirs'] << dir.basename.to_s
+    else
+      summaries[id] = {
+        'type_dirs' => [dir.basename.to_s],
+        'identifier' => id,
+        'file_path' => entry['file_path'].to_s,
+        'dir' => dir
+      }
+    end
   end
 rescue JSON::ParserError => e
   violation(violations, "#{index_file}: unreadable (#{e.message})")
@@ -110,8 +117,8 @@ models = contract['models'] || {}
   summary = summary_for(summaries, name)
   next violation(violations, "model #{name}: not in the index") if summary.nil?
 
-  unless summary['type_dir'] == 'models'
-    violation(violations, "model #{name}: extracted into #{summary['type_dir']}, expected models")
+  unless summary['type_dirs'].include?('models')
+    violation(violations, "model #{name}: extracted into #{summary['type_dirs'].join('/')}, expected models")
   end
 end
 
@@ -147,8 +154,8 @@ Array(contract['poros']).each do |poro|
   summary = summary_for(summaries, poro['class'])
   next violation(violations, "poro #{poro['class']}: not in the index") if summary.nil?
 
-  unless summary['type_dir'] == 'poros'
-    violation(violations, "poro #{poro['class']}: extracted into #{summary['type_dir']}, expected poros")
+  unless summary['type_dirs'].include?('poros')
+    violation(violations, "poro #{poro['class']}: extracted into #{summary['type_dirs'].join('/')}, expected poros")
   end
 end
 
@@ -252,7 +259,7 @@ end
 Array(contract['state_machines']).each do |sm|
   checks += 1
   found = summaries.values.any? do |s|
-    s['type_dir'] == 'state_machines' && s['identifier'].include?(sm['class'].to_s)
+    s['type_dirs'].include?('state_machines') && s['identifier'].include?(sm['class'].to_s)
   end
   violation(violations, "state machine on #{sm['class']}: no state_machine unit") unless found
 end
@@ -282,10 +289,10 @@ Array(contract['policies']).each do |policy|
   end
 
   expected_dir = policy['expect_type'].to_s == 'pundit_policy' ? 'pundit_policies' : 'policies'
-  next if summary['type_dir'] == expected_dir
+  next if summary['type_dirs'].include?(expected_dir)
 
   violation(violations, "#{policy['class']} (#{policy['shape']}-shaped): landed in " \
-                        "#{summary['type_dir']}, expected #{expected_dir} — check the " \
+                        "#{summary['type_dirs'].join('/')}, expected #{expected_dir} — check the " \
                         'method names still match the extractor pattern')
 end
 
