@@ -39,21 +39,69 @@ directory, edit the Gemfile pin, add a new service to
 - Docker + Docker Compose (v2)
 - A local checkout of the [woods gem](https://github.com/lost-in-the/woods)
 
+### Running in a Claude Code web/app session
+
+The variants work in a remote Claude Code session, but two things differ from a
+laptop and both look like hard failures if you don't know them.
+
+**1. The Docker daemon isn't running.** The `docker` CLI and the compose plugin
+are installed, but there is no daemon and no `/var/run/docker.sock`, so the
+first command fails with `Cannot connect to the Docker daemon` — which reads
+like Docker is unavailable. It isn't. Start it with `bin/bootstrap_docker.sh`
+(idempotent, safe at the top of any script).
+
+**2. Containers can't reach the network the way the host does.** The session's
+egress proxy re-terminates TLS and listens on `127.0.0.1` only, so a container
+on the default bridge gets a certificate error from `gem install` and a
+connection refused from `bundle install`. Both look like a broken network; both
+are fixable.
+
+Use the wrapper instead of `docker compose` directly — it starts the daemon,
+installs the CA into the image, and puts the container in the host network
+namespace:
+
+```bash
+bin/ccr_compose.sh build rails-8.0-large
+bin/ccr_compose.sh up -d rails-8.0-large
+docker exec woods-testbed-rails-8.0-large bash -lc 'cd /app && bin/rails woods:extract'
+```
+
+On a laptop the wrapper detects no proxy and passes straight through to
+`docker compose`, so it is safe to use everywhere.
+
+Two caveats under the overlay: `network_mode: host` **discards `ports:`**, so
+the app binds directly on the host at 3000 and variants can't run side by side;
+and `curl` to a container needs `--noproxy '*'` or it is sent to the proxy.
+
+> Currently only `rails-8.0-large` carries the CA layer in its Dockerfile. The
+> other three variants still fail to build behind the proxy — see §1.5 of
+> [`docs/plans/002-large-app-variant.md`](docs/plans/002-large-app-variant.md).
+
+Image pulls through the proxy work normally — no extra configuration needed.
+
 ## Layout
 
 ```
 woods-testbed/
 ├── apps/
 │   ├── rails-8.0/        Rails 8 variant (tutorial sample app)
-│   └── rails-7.2/        Rails 7.2 variant
+│   ├── rails-7.2/        Rails 7.2 variant
+│   └── rails-6.0/        Rails 6.0 variant (supported floor, minimal)
+├── bin/                  Host-side tooling — runs on your machine, not in a container
+│   └── bootstrap_docker.sh              # start the Docker daemon if it isn't running
+├── docs/
+│   └── plans/            Design + implementation plans, one per issue
 ├── scripts/              Shared smoke scripts (mounted at /app/script/shared)
 │   ├── woods_smoke.rb
 │   ├── woods_credentials_smoke.rb
 │   ├── woods_worktree_smoke.rb          # git provenance in worktrees (#137)
 │   └── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
-├── share/                Shared snippets (initializers, seeds) referenced by apps
 └── docker-compose.yml
 ```
+
+Two directories, two audiences: everything in `scripts/` runs **inside** a
+container via `bin/rails runner script/shared/…`, and everything in `bin/` runs
+**on the host**. The read-only bind mount only covers `scripts/`.
 
 ## Quick start
 

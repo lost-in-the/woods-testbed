@@ -1,0 +1,49 @@
+source "https://rubygems.org"
+git_source(:github) { |repo| "https://github.com/#{repo}.git" }
+
+ruby "3.3.1"
+
+# Rails 8.0.x. This variant exists to measure extraction at scale (#2), not to
+# cover a Rails version — the version matrix is the small variants' job.
+gem "rails", "~> 8.0.0"
+
+gem "sqlite3", "~> 2.1"
+gem "puma", ">= 6.0"
+gem "bootsnap", ">= 1.18.0", require: false
+
+# Woods gem — bind-mounted by the testbed compose file.
+gem "woods", path: "/woods-gem"
+
+# ── Kernel dependencies (see KERNEL_CONTRACT.md) ──────────────────────────
+# Added in one batch rather than per rung: every Gemfile change costs a
+# bundle install, and behind an intercepting proxy that install needs the
+# ccr overlay. One boot beats four. Each of these is inert until the kernel
+# file that uses it exists.
+gem "aasm"                      # state_machine units
+gem "pundit"                    # pundit_policy units
+gem "view_component"            # view_component units
+gem "phlex-rails"               # component units
+# NOT scenic. It hooks the schema dump with PostgreSQL-only queries (pg_class,
+# pg_get_viewdef) and takes db:prepare down on SQLite with
+# "no such table: pg_class". DatabaseViewExtractor reads db/views/*.sql
+# statically and never needs the gem loaded, so the database_view units are
+# produced either way — the dependency bought nothing and cost a boot.
+# graphql_type / graphql_mutation / graphql_resolver units.
+#
+# GraphQLExtractor's file pass is deliberately NOT gated on this gem being
+# loaded (graphql_source_present?, not graphql_available?), so app/graphql is
+# indexed either way. It is installed here so eager_load doesn't hit a NameError
+# and fall back to per-directory loading, which would make every timing number
+# in this variant describe a degraded run. The gem-absent scenario is a separate
+# axis — see KERNEL_CONTRACT.md and woods B-066 / #167.
+gem "graphql"
+# pgvector round-trip in scripts/woods_embedding_smoke.rb. The gem's Pgvector
+# adapter wants an object responding to #execute and #quote — an ActiveRecord
+# connection, not a URL string — so the smoke script opens a secondary
+# connection to the backends-profile Postgres, which needs this driver.
+gem "pg", "~> 1.5"
+
+group :development, :test do
+  gem "rspec-rails"             # test_mapping units (spec/**/*_spec.rb)
+  gem "factory_bot_rails"       # factory units (spec/factories/*.rb)
+end

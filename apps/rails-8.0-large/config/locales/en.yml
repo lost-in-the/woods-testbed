@@ -1,0 +1,8 @@
+en:
+  articles:
+    index:
+      title: "Articles"
+  billing:
+    invoices:
+      index:
+        title: "Invoices"

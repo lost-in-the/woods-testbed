@@ -1,0 +1,7 @@
+<h1>Comments on <%= @article.title %></h1>
+<%= link_to "Back to article", article_path(@article) %>
+<ul>
+  <% @comments.each do |comment| %>
+    <li><%= comment.body %></li>
+  <% end %>
+</ul>

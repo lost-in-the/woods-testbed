@@ -24,11 +24,26 @@ require 'woods/console/credential_scanner'
 require 'woods/console/server'
 require 'woods/console/model_validator'
 
+# Skip cleanly on variants that do not carry the Credential fixture.
+#
+# scripts/ runs against EVERY variant, so a script that assumes one variant's
+# models has to say "not applicable" rather than fail — same contract as
+# woods_contract_smoke.rb. rails-6.0 and rails-8.0-large have no Credential
+# model, and before this guard they failed here with
+# "no such table: credentials" or an uninitialised constant.
+seed_file = Rails.root.join('db/seeds/credentials.rb')
+
+unless seed_file.file? && defined?(Credential)
+  puts "No Credential fixture in #{Rails.root.basename} " \
+       '— nothing to check for this variant.'
+  exit 0
+end
+
 # Load the seed list — same fixtures used to populate the DB.
-load Rails.root.join('db/seeds/credentials.rb').to_s
+load seed_file.to_s
 
 # Reload to get the live data (seeds delete_all + recreate).
-load Rails.root.join('db/seeds/credentials.rb').to_s if Credential.count.zero?
+load seed_file.to_s if Credential.count.zero?
 
 # ── Pipeline construction ────────────────────────────────────────────────
 

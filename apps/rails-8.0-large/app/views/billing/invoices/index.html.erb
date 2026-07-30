@@ -1,0 +1,6 @@
+<h1><%= t("billing.invoices.index.title") %></h1>
+<ul>
+  <% @invoices.each do |invoice| %>
+    <li><%= link_to invoice.reference, billing_invoice_path(invoice) %></li>
+  <% end %>
+</ul>

@@ -1,0 +1,10 @@
+# Solid Queue recurring tasks — one of the three schedule formats
+# ScheduledJobExtractor recognises (the others are config/sidekiq_cron.yml and
+# config/schedule.rb).
+production:
+  archive_stale_articles:
+    class: PublishArticleJob
+    schedule: "0 0 * * *"
+  charge_outstanding_invoices:
+    class: Billing::ChargePaymentJob
+    schedule: "0 * * * *"

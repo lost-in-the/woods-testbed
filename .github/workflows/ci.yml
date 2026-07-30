@@ -1,0 +1,233 @@
+name: CI
+
+# This repo previously had no CI at all, so nothing caught variant bit-rot and
+# the benchmark numbers #2 asks for had no enforcement point. See
+# docs/plans/002-large-app-variant.md §1.4.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+# Least-privilege: CI only reads this checkout and the public gem repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast feedback with no containers. Everything here fails in seconds if a
+  # script or the contract is malformed, so a broken helper never costs a
+  # ten-minute variant boot to discover.
+  lint:
+    name: Lint scripts, contract, compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Shell scripts parse and lint
+        run: |
+          for f in bin/*.sh; do bash -n "$f"; done
+          shellcheck bin/*.sh
+
+      - name: Ruby scripts parse
+        run: |
+          for f in scripts/*.rb; do ruby -c "$f" >/dev/null; done
+          echo "all scripts parse"
+
+      # The gem is checked out here too — cheap, no build — so the contract's
+      # type keys can be validated against IndexReader::TYPE_DIRS rather than
+      # against a guess. manifest.json's `counts` is keyed by plural directory
+      # name, and a singular key silently reports 0 forever; this repo has
+      # already had that bug once.
+      - name: Check out the woods gem (for TYPE_DIRS)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: lost-in-the/woods
+          path: .gem-ref
+
+      - name: Kernel contract matches the gem's type directories
+        run: |
+          ruby -ryaml -e '
+            # Explicit encoding: File.read tags with the process default
+            # external encoding, which is US-ASCII under LANG=C, and this file
+            # contains non-ASCII comment glyphs. Same trap the gem documents for
+            # its own artifacts.
+            reader = File.read(".gem-ref/lib/woods/mcp/index_reader.rb", encoding: "UTF-8")
+            block  = reader[/TYPE_DIRS\s*=\s*%w\[(.*?)\]/m, 1] or abort "could not read TYPE_DIRS from the gem"
+            known  = block.split(/\s+/).reject(&:empty?)
+
+            c = YAML.safe_load_file("apps/rails-8.0-large/kernel_contract.yml", aliases: true)
+            %w[version models concerns services navigation_edges types policies].each do |k|
+              abort "kernel_contract.yml missing #{k}" unless c.key?(k)
+            end
+
+            unknown = c["types"].keys - known
+            abort "types keys not in the gem TYPE_DIRS: #{unknown.join(", ")}" unless unknown.empty?
+
+            puts "contract OK: #{c["types"].size} of #{known.size} type dirs asserted, " \
+                 "#{Array(c["known_gem_issues"]).size} known gem issues"
+          '
+
+      - name: Compose config resolves
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.ccr.yml config --quiet
+          echo "compose OK"
+
+  # Boot each variant for real and run a full extraction against it. This is the
+  # only thing that catches version-sensitive extraction breakage, and the only
+  # place the kernel contract can be enforced.
+  #
+  # fail-fast is off: one variant breaking should not hide the state of the
+  # others, which is the whole point of having a version matrix.
+  variants:
+    name: ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [rails-8.0-large, rails-8.0, rails-7.2, rails-6.0]
+    steps:
+      - name: Check out the testbed
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          path: woods-testbed
+
+      # The compose file mounts the gem from ${WOODS_GEM_PATH:-../woods}, so the
+      # sibling-repo layout has to be reproduced here. Both repos are public, so
+      # the default token is enough — no PAT secret required.
+      - name: Check out the woods gem as a sibling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: lost-in-the/woods
+          path: woods
+
+      - name: Build the variant image
+        working-directory: woods-testbed
+        run: docker compose build ${{ matrix.variant }}
+
+      - name: Start the variant
+        working-directory: woods-testbed
+        run: docker compose up -d ${{ matrix.variant }}
+
+      # The container's CMD runs `bundle install && db:prepare && rails server`,
+      # so "booted" means Puma is listening — not merely that the container is up.
+      - name: Wait for boot
+        working-directory: woods-testbed
+        run: |
+          container="woods-testbed-${{ matrix.variant }}"
+          # 240 x 5s = 20 min. rails-6.0 (Ruby 3.0, old pinned gems) exceeded the
+          # previous 10-minute budget purely on bundle install, and a timeout
+          # there reads as a boot failure when it is really impatience.
+          for i in $(seq 1 240); do
+            if docker logs "$container" 2>&1 | grep -q "Listening on"; then
+              echo "booted after ~$((i * 5))s"; exit 0
+            fi
+            # Fail fast on anything that means the container will never boot.
+            # The first three were here already; the rest were added after
+            # rails-6.0 burned the entire 20-minute budget on
+            #   "Your Ruby version is 3.0.7, but your Gemfile specified 3.0.6"
+            # which matched none of them. A detector that only knows some
+            # failures turns every unknown one into a timeout, and a timeout
+            # reads as slowness rather than as the error it is.
+            if docker logs "$container" 2>&1 | grep -qE "Bundler::|Could not find|LoadError|Your Ruby version|aborted!|Gemfile specified|Could not locate Gemfile"; then
+              echo "::error::boot failed — see the container log below"
+              docker logs "$container" 2>&1 | tail -40
+              exit 1
+            fi
+            # Progress every minute, so a slow boot is visibly slow rather than
+            # indistinguishable from a hang.
+            [ $((i % 12)) -eq 0 ] && echo "  still booting (~$((i * 5))s): $(docker logs "$container" 2>&1 | tail -1)"
+            sleep 5
+          done
+          echo "::error::timed out waiting for boot after 20 minutes"
+          docker logs "$container" 2>&1 | tail -60
+          exit 1
+
+      # Explicit, for every variant. Only rails-8.0-large's Dockerfile CMD runs
+      # db:prepare; the three legacy variants never do, so a fresh checkout has
+      # no tables at all. That broke woods_credentials_smoke ("no such table:
+      # credentials") and, more quietly, degraded extraction itself —
+      # ModelExtractor drops a model whose table_exists? is false, so those runs
+      # were measuring a partial index without saying so.
+      - name: Prepare the database
+        working-directory: woods-testbed
+        run: |
+          docker exec "woods-testbed-${{ matrix.variant }}" \
+            bash -lc 'cd /app && bin/rails db:prepare'
+
+      # woods:clean first, deliberately: a full extraction overwrites unit files
+      # but does not prune orphans, so a reused output directory over-reports
+      # every count. See lost-in-the/woods#177.
+      - name: Extract and validate
+        working-directory: woods-testbed
+        run: |
+          container="woods-testbed-${{ matrix.variant }}"
+          docker exec "$container" bash -lc 'cd /app && bin/rails woods:clean'
+          docker exec "$container" bash -lc 'cd /app && bin/rails woods:extract'
+          docker exec "$container" bash -lc 'cd /app && bin/rails woods:validate'
+
+      # Every script directly under scripts/ runs against every variant. They are
+      # version-agnostic and skip cleanly when a variant lacks what they need, so
+      # this doubles as a check that the skip paths still work.
+      #
+      # scripts/tools/ is deliberately NOT included: the generator writes a tree
+      # into the app, and the benchmark mutates app files and takes minutes.
+      # Running those against rails-7.2 or rails-6.0 would reshape those variants
+      # mid-run. The glob does not recurse, so the split is the guard.
+      - name: Run shared smoke scripts
+        working-directory: woods-testbed
+        run: |
+          container="woods-testbed-${{ matrix.variant }}"
+          status=0
+          for script in scripts/*.rb; do
+            name=$(basename "$script")
+            echo "── $name"
+            docker exec "$container" bash -lc "cd /app && bin/rails runner script/shared/$name" || status=1
+          done
+          exit $status
+
+      # Everything under tmp/woods was written by root inside the container and
+      # bind-mounted out, so the runner user cannot read it — both the coverage
+      # reporter and the artifact upload fail with EACCES without this. Invisible
+      # locally, where the developer is usually root already.
+      - name: Take ownership of the extracted index
+        if: always()
+        working-directory: woods-testbed
+        run: sudo chown -R "$(id -u):$(id -g)" "apps/${{ matrix.variant }}/tmp" || true
+
+      - name: Report type coverage
+        if: always()
+        working-directory: woods-testbed
+        run: |
+          manifest="apps/${{ matrix.variant }}/tmp/woods/manifest.json"
+          [ -f "$manifest" ] || { echo "no manifest — extraction did not complete"; exit 0; }
+          ruby -rjson -e '
+            m = JSON.parse(File.read(ARGV[0], encoding: "UTF-8"))
+            counts = m["counts"] || {}
+            empty = counts.reject { |_, v| v.to_i.positive? }.keys
+            app = m["total_units"].to_i - counts.fetch("rails_source", 0).to_i
+            puts "total units:      #{m["total_units"]}"
+            puts "app-code units:   #{app}"
+            puts "types non-empty:  #{counts.size - empty.size}/#{counts.size}"
+            puts "empty types:      #{empty.empty? ? "none" : empty.join(", ")}"
+          ' "$manifest" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Kept for the benchmark rungs: a stored index makes a number from six
+      # months ago inspectable rather than merely quotable.
+      - name: Upload the extracted index
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: index-${{ matrix.variant }}
+          path: woods-testbed/apps/${{ matrix.variant }}/tmp/woods
+          retention-days: 14
+          if-no-files-found: warn
