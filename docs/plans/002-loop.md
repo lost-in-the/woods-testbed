@@ -156,3 +156,48 @@ scripts rather than judgements, and the bottleneck is one Docker daemon and one
 disk allowance — none of which parallelism improves. The loop's value here is
 **resumability across session boundaries and long container waits**, not
 concurrency.
+
+---
+
+## Outcome
+
+**14 of 15 rungs green.** Written after the fact, so a future reader can see
+where the ladder held and where it bent.
+
+| Rung | Result |
+|---|---|
+| 1–7 | Green. Kernel violations went 62 → 36 → 22 → 0, monotonically, as the metric demanded |
+| 8 | Green — but only after CI itself found four pre-existing variant bugs (see PR #3). The rung's own gate ("workflow run green on the branch") was the last thing to pass, not the first |
+| 9–13 | Green. Rung 9's calibration landed at ~7,309 projected units, inside the 6,000–8,000 band, so no decision-needed exit was triggered |
+| 14 | **Deferred by judgement**, not blocked. Filed as [woods#178](https://github.com/lost-in-the/woods/issues/178) |
+| 15 | Green — [woods#182](https://github.com/lost-in-the/woods/pull/182), merged |
+
+### Where the strategy earned its keep
+
+The **derived-state invariant** did the real work. Two rungs were re-entered
+after a context boundary with no memory of them, and both times the gate script
+— not a note — said what was left. Rung 12's Qdrant path is still open for
+exactly that reason: the gate reports it, so it cannot be quietly forgotten.
+
+**Invariant 6 (a gate failing twice identically means blocked) fired once**, on
+the local `rails-6.0` reproduction: 46 transient rubygems 503s through the
+session proxy. Correctly classified as a local artifact rather than a variant
+defect, and escalated to CI as the authority instead of being worked around.
+
+### Where it was wrong
+
+Rung 14's gate — "gem suite green; `rake woods:embed` runs with no live
+endpoint" — was written as though the work were mine to do. It's a gem change
+with a design question attached (should `Builder` accept an injected provider,
+or should `Provider::Fake` be promoted out of `spec/support/`?), and answering
+that unilaterally inside a testbed PR would have been the wrong call. **A ladder
+should not contain a rung whose gate presumes a decision the ladder doesn't
+own.** The honest exit was an issue, and the ladder had no vocabulary for that
+outcome — only "green", "blocked", or "decision needed".
+
+Rung 8's placement was also wrong: eighth. CI belongs at rung 2, before the
+kernel. Every bug it found was already on `main` and had been for as long as
+those variants existed; four rungs' worth of measurements were taken against
+variants with no database tables, which `ModelExtractor` silently degrades
+rather than reporting. The numbers survived only because the large variant *did*
+run `db:prepare`. That was luck, not sequencing.

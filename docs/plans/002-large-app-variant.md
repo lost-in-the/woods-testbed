@@ -2,7 +2,11 @@
 
 Addresses [woods-testbed#2](https://github.com/lost-in-the/woods-testbed/issues/2).
 
-Status: **in progress** — rungs 1–13 done; measured against gem main `9d90bf5`, see [`002-loop.md`](002-loop.md).
+Status: **complete** — 14 of 15 rungs green (rung 14 deferred as
+[woods#178](https://github.com/lost-in-the/woods/issues/178), see
+[`002-loop.md`](002-loop.md)). Measured against gem main `9d90bf5`; the gem-side
+doc update is [woods#182](https://github.com/lost-in-the/woods/pull/182), merged.
+CI green on all five jobs.
 
 ---
 
