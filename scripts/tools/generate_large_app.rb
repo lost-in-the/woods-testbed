@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
-# Run with:  bin/rails runner script/shared/generate_large_app.rb
+# Run with:  ruby script/shared/tools/generate_large_app.rb
+#
+# In scripts/tools/, not scripts/: CI runs every scripts/*.rb against every
+# variant, and this one WRITES a generated tree into the app. Running it against
+# rails-7.2 or rails-6.0 would silently reshape those variants.
 #        or: ruby script/shared/generate_large_app.rb   (no Rails needed)
 #
 # Generates the multiplied half of apps/rails-8.0-large: thousands of units with

@@ -124,17 +124,23 @@ jobs:
         working-directory: woods-testbed
         run: |
           container="woods-testbed-${{ matrix.variant }}"
-          for _ in $(seq 1 120); do
+          # 240 x 5s = 20 min. rails-6.0 (Ruby 3.0, old pinned gems) exceeded the
+          # previous 10-minute budget purely on bundle install, and a timeout
+          # there reads as a boot failure when it is really impatience.
+          for i in $(seq 1 240); do
             if docker logs "$container" 2>&1 | grep -q "Listening on"; then
-              echo "booted"; exit 0
+              echo "booted after ~$((i * 5))s"; exit 0
             fi
             if docker logs "$container" 2>&1 | grep -qE "Bundler::|Could not find|LoadError"; then
               echo "::error::boot failed"; docker logs "$container" 2>&1 | tail -40; exit 1
             fi
+            # Progress every minute, so a slow boot is visibly slow rather than
+            # indistinguishable from a hang.
+            [ $((i % 12)) -eq 0 ] && echo "  still booting (~$((i * 5))s): $(docker logs "$container" 2>&1 | tail -1)"
             sleep 5
           done
-          echo "::error::timed out waiting for boot"
-          docker logs "$container" 2>&1 | tail -40
+          echo "::error::timed out waiting for boot after 20 minutes"
+          docker logs "$container" 2>&1 | tail -60
           exit 1
 
       # Explicit, for every variant. Only rails-8.0-large's Dockerfile CMD runs
@@ -160,9 +166,14 @@ jobs:
           docker exec "$container" bash -lc 'cd /app && bin/rails woods:extract'
           docker exec "$container" bash -lc 'cd /app && bin/rails woods:validate'
 
-      # Every shared script runs against every variant. They are written to be
-      # version-agnostic and to skip cleanly when a variant lacks what they
-      # need, so this doubles as a check that the skip paths still work.
+      # Every script directly under scripts/ runs against every variant. They are
+      # version-agnostic and skip cleanly when a variant lacks what they need, so
+      # this doubles as a check that the skip paths still work.
+      #
+      # scripts/tools/ is deliberately NOT included: the generator writes a tree
+      # into the app, and the benchmark mutates app files and takes minutes.
+      # Running those against rails-7.2 or rails-6.0 would reshape those variants
+      # mid-run. The glob does not recurse, so the split is the guard.
       - name: Run shared smoke scripts
         working-directory: woods-testbed
         run: |

@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
-# Run with:  bin/rails runner script/shared/woods_bench.rb
+# Run with:  bin/rails runner script/shared/tools/woods_bench.rb
+#
+# Lives in scripts/tools/ rather than scripts/ deliberately: CI runs every
+# scripts/*.rb against every variant, and this one is slow and MUTATES app
+# files. Only idempotent, read-only, version-agnostic smoke scripts belong one
+# level up.
 #
 # ═══════════════════════════════════════════════════════════════════════════
 # What this measures
@@ -24,9 +29,9 @@
 # ═══════════════════════════════════════════════════════════════════════════
 #
 #   # generate a tree first — the point is scale
-#   ruby script/shared/generate_large_app.rb          # WOODS_GEN_SCALE=small|medium|large
+#   ruby script/shared/tools/generate_large_app.rb          # WOODS_GEN_SCALE=small|medium|large
 #   bin/rails db:prepare
-#   bin/rails runner script/shared/woods_bench.rb
+#   bin/rails runner script/shared/tools/woods_bench.rb
 #
 #   WOODS_BENCH_REPS=7          repetitions per scenario (default 7; p95 of 7 is
 #                               the 7th value, so treat p95 as indicative below
@@ -53,7 +58,7 @@ require 'benchmark'
 APP        = Rails.root
 INDEX_DIR  = Pathname.new(ENV.fetch('WOODS_OUTPUT', APP.join('tmp/woods').to_s))
 REPS       = Integer(ENV.fetch('WOODS_BENCH_REPS', '7'))
-CHANGE_DIR = APP.join('script/shared/bench_changes')
+CHANGE_DIR = APP.join('script/shared/tools/bench_changes')
 
 require 'woods'
 require 'woods/extractor'

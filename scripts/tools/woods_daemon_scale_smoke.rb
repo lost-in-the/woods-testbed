@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
-# Run with:  bin/rails runner script/shared/woods_daemon_scale_smoke.rb
+# Run with:  bin/rails runner script/shared/tools/woods_daemon_scale_smoke.rb
+#
+# In scripts/tools/, not scripts/: it forks six processes and runs twelve full
+# extractions, far too slow for the per-variant CI smoke loop.
 #
 # Measures the two remaining extrapolated claims in the gem's
 # docs/WATCH_DAEMON.md (woods-testbed#2, claim 3):

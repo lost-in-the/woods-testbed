@@ -1,4 +1,4 @@
-class CreateCredentials < ActiveRecord::Migration[8.0]
+class CreateCredentials < ActiveRecord::Migration[7.2]
   def change
     create_table :credentials do |t|
       t.string :provider
