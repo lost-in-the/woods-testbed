@@ -131,8 +131,17 @@ jobs:
             if docker logs "$container" 2>&1 | grep -q "Listening on"; then
               echo "booted after ~$((i * 5))s"; exit 0
             fi
-            if docker logs "$container" 2>&1 | grep -qE "Bundler::|Could not find|LoadError"; then
-              echo "::error::boot failed"; docker logs "$container" 2>&1 | tail -40; exit 1
+            # Fail fast on anything that means the container will never boot.
+            # The first three were here already; the rest were added after
+            # rails-6.0 burned the entire 20-minute budget on
+            #   "Your Ruby version is 3.0.7, but your Gemfile specified 3.0.6"
+            # which matched none of them. A detector that only knows some
+            # failures turns every unknown one into a timeout, and a timeout
+            # reads as slowness rather than as the error it is.
+            if docker logs "$container" 2>&1 | grep -qE "Bundler::|Could not find|LoadError|Your Ruby version|aborted!|Gemfile specified|Could not locate Gemfile"; then
+              echo "::error::boot failed — see the container log below"
+              docker logs "$container" 2>&1 | tail -40
+              exit 1
             fi
             # Progress every minute, so a slow boot is visibly slow rather than
             # indistinguishable from a hang.
