@@ -128,7 +128,8 @@ CREDENTIAL_FIXTURES.each do |fixture|
       ['find',    { 'model' => 'Credential', 'id' => credential.id }],
       ['sample',  { 'model' => 'Credential', 'limit' => 25 }],
       ['pluck',   { 'model' => 'Credential', 'columns' => %w[provider value notes metadata] }],
-      ['query',   { 'model' => 'Credential', 'scope' => { 'provider' => fixture[:provider] }, 'limit' => 5 }]
+      ['query',   { 'model' => 'Credential', 'select' => %w[provider value notes metadata],
+                    'scope' => { 'provider' => fixture[:provider] }, 'limit' => 5 }]
     ]
 
     tool_calls.each do |tool, params|

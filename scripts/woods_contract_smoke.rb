@@ -38,19 +38,29 @@ require 'json'
 CONTRACT_PATH = Rails.root.join('kernel_contract.yml')
 INDEX_DIR     = Pathname.new(ENV.fetch('WOODS_OUTPUT', Rails.root.join('tmp/woods').to_s))
 
+# Woods 2.0 publishes each generation under payloads/gen-N/ and names the
+# current one in generation.json; older gems wrote a flat index. Resolve the
+# same way the gem does so this script reads whichever layout is on disk.
+PAYLOAD_DIR = begin
+  require 'woods/generation'
+  Woods::Generation.new(output_dir: INDEX_DIR).payload_dir
+rescue LoadError, NameError
+  INDEX_DIR
+end
+
 unless CONTRACT_PATH.file?
   puts "No kernel_contract.yml in #{Rails.root} — nothing to check for this variant."
   exit 0
 end
 
-unless INDEX_DIR.join('manifest.json').file?
+unless PAYLOAD_DIR.join('manifest.json').file?
   warn "No index at #{INDEX_DIR}. Run `bin/rails woods:extract` first."
   exit 1
 end
 
 contract = YAML.safe_load_file(CONTRACT_PATH, aliases: true)
-manifest = JSON.parse(INDEX_DIR.join('manifest.json').read)
-graph    = JSON.parse(INDEX_DIR.join('dependency_graph.json').read)
+manifest = JSON.parse(PAYLOAD_DIR.join('manifest.json').read)
+graph    = JSON.parse(PAYLOAD_DIR.join('dependency_graph.json').read)
 counts   = manifest['counts'] || {}
 edges    = graph['edges'] || {}
 
@@ -70,7 +80,7 @@ end
 # both are matched when a type is looked up.
 summaries = {} # identifier => { type_dir:, identifier:, file_path: }
 
-INDEX_DIR.children.select(&:directory?).each do |dir|
+PAYLOAD_DIR.children.select(&:directory?).each do |dir|
   index_file = dir.join('_index.json')
   next unless index_file.file?
 
