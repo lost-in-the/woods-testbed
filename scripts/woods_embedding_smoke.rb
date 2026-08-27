@@ -44,6 +44,16 @@ require 'woods/storage/vector_store'
 
 INDEX_DIR = Pathname.new(ENV.fetch('WOODS_OUTPUT', Rails.root.join('tmp/woods').to_s))
 
+# Woods 2.0 publishes each generation under payloads/gen-N/ and names the
+# current one in generation.json; older gems wrote a flat index. Resolve the
+# same way the gem does so this script reads whichever layout is on disk.
+PAYLOAD_DIR = begin
+  require 'woods/generation'
+  Woods::Generation.new(output_dir: INDEX_DIR).payload_dir
+rescue LoadError, NameError
+  INDEX_DIR
+end
+
 results = []
 
 def assert(name)
@@ -85,7 +95,7 @@ puts "AR adapter: #{ActiveRecord::Base.connection_pool.with_connection(&:adapter
 puts "Index:      #{INDEX_DIR}"
 puts
 
-unless INDEX_DIR.join('manifest.json').file?
+unless PAYLOAD_DIR.join('manifest.json').file?
   warn "No index at #{INDEX_DIR}. Run `bin/rails woods:extract` first."
   exit 1
 end

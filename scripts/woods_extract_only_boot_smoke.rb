@@ -5,10 +5,9 @@
 # Smoke-tests the extract-only Index Server boot behaviour (#138) against a real
 # Rails boot. Version-agnostic: prints the detected Rails version.
 #
-# Since 1.3.0 the Index Server raised MissingArtifact at boot unless woods.json
-# existed or WOODS_ALLOW_AUTODETECT=1 was set. Extract-only hosts (woods:extract,
-# no embedding provider) now boot in pattern/structural mode by default; strict
-# deployments opt into fail-closed with WOODS_REQUIRE_INDEX=1.
+# Extract-only hosts (woods:extract, no embedding provider) boot the Index
+# Server in pattern/structural mode by default; strict deployments opt into
+# fail-closed with WOODS_REQUIRE_INDEX=1.
 
 require 'tmpdir'
 require 'woods'

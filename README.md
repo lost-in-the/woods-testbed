@@ -2,9 +2,8 @@
 
 Host Rails apps used to exercise the [woods](https://github.com/lost-in-the/woods)
 gem against a real, booted Rails environment. The gem can't be fully
-validated by unit tests alone — extraction, the Console MCP server, and
-the ERD middleware all require a live Rails boot with models, routes,
-and a database.
+validated by unit tests alone: extraction and the Console MCP server
+both require a live Rails boot with models, routes, and a database.
 
 This repo carries **one Rails app per supported Rails version**. They're
 minimal forks of the [Rails Tutorial sample app](https://github.com/mhartl/sample_app_6th_ed)
@@ -18,6 +17,7 @@ scripts that assert behavioural invariants.
 | `apps/rails-8.0` | 8.0.x | 3.3.1 | 3010 | `woods-testbed-rails-8.0` |
 | `apps/rails-7.2` | ~> 7.2.0 | 3.3.1 | 3011 | `woods-testbed-rails-7.2` |
 | `apps/rails-6.0` | ~> 6.0.0 | 3.0 | 3012 | `woods-testbed-rails-6.0` |
+| `apps/rails-8.0-large` | 8.0.x | 3.3.1 | 3013 | `woods-testbed-rails-8.0-large` |
 
 The 8.0 and 7.2 variants are minimal forks of the Rails Tutorial sample app.
 The **rails-6.0** variant — the supported floor (`railties >= 6.0`, woods #135)
@@ -25,6 +25,11 @@ The **rails-6.0** variant — the supported floor (`railties >= 6.0`, woods #135
 job, a mailer; no asset pipeline or JS bundler) so the Rails 6.0 boot stays small.
 It's validated via Docker/CI rather than the host, since Ruby 3.0 / Rails 6.0
 aren't installed on most dev machines.
+
+The **rails-8.0-large** variant is a large synthetic app for scale
+benchmarks (incremental latency, whole-app re-run cost, daemon memory). It
+exists to measure scale, not version behaviour, and is the only variant
+whose `Dockerfile` runs `db:prepare` at boot.
 
 Each variant has its own `Gemfile`, its own bundle volume, and its own
 container. They share `scripts/` (woods smoke scripts) via a read-only
@@ -86,16 +91,21 @@ woods-testbed/
 ├── apps/
 │   ├── rails-8.0/        Rails 8 variant (tutorial sample app)
 │   ├── rails-7.2/        Rails 7.2 variant
-│   └── rails-6.0/        Rails 6.0 variant (supported floor, minimal)
-├── bin/                  Host-side tooling — runs on your machine, not in a container
-│   └── bootstrap_docker.sh              # start the Docker daemon if it isn't running
+│   ├── rails-6.0/        Rails 6.0 variant (supported floor, minimal)
+│   └── rails-8.0-large/  Rails 8 scale variant (synthetic, benchmarks)
+├── bin/                  Host-side tooling: runs on your machine, not in a container
+│   ├── bootstrap_docker.sh              # start the Docker daemon if it isn't running
+│   └── ccr_compose.sh                   # docker compose wrapper for proxied sessions
 ├── docs/
 │   └── plans/            Design + implementation plans, one per issue
 ├── scripts/              Shared smoke scripts (mounted at /app/script/shared)
 │   ├── woods_smoke.rb
 │   ├── woods_credentials_smoke.rb
+│   ├── woods_contract_smoke.rb          # kernel contract (rails-8.0-large)
+│   ├── woods_embedding_smoke.rb         # embedding pipeline against a backend
 │   ├── woods_worktree_smoke.rb          # git provenance in worktrees (#137)
-│   └── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
+│   ├── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
+│   └── tools/                           # generator + benchmark (not run by CI)
 └── docker-compose.yml
 ```
 
@@ -142,7 +152,7 @@ WOODS_GEM_PATH=/absolute/path/to/woods-feature-branch \
 ### Changing ports
 
 ```bash
-RAILS_8_PORT=4010 RAILS_72_PORT=4011 RAILS_60_PORT=4012 docker compose up
+RAILS_8_PORT=4010 RAILS_72_PORT=4011 RAILS_60_PORT=4012 RAILS_8_LARGE_PORT=4013 docker compose up
 ```
 
 ## Running woods against a variant
@@ -168,9 +178,10 @@ host and to editors.
 
 ## Running smoke scripts
 
-Two smoke scripts live in `scripts/` at the repo root. They're
-version-agnostic — each prints the detected Rails version in its
-header. Inside a container they appear under `script/shared/`:
+The smoke scripts live in `scripts/` at the repo root. They're
+version-agnostic: each prints the detected Rails version in its header
+and skips cleanly when a variant lacks what it needs. Inside a container
+they appear under `script/shared/`:
 
 ```bash
 # Rails 8 smoke
@@ -209,7 +220,11 @@ docker compose exec rails-7.2 bin/rails console
   routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
   `apps/rails-6.0/README.md`.
 - **All variants:** a `config/initializers/woods_console.rb` that enables
-  Console MCP, ERD middleware, and a baseline set of redacted columns.
+  Console MCP and a baseline set of redacted columns. The bearer token
+  comes from `WOODS_CONSOLE_MCP_TOKEN` in `docker-compose.yml` (a fixed,
+  test-only value). Without a token the gem refuses every Console MCP
+  request with 401, so a bare `bin/rails server` outside compose has the
+  endpoint enabled but inaccessible.
 
 Agents have permission to modify anything under `apps/` — add models,
 migrations, controllers, initializers, or fixtures as needed to
@@ -219,7 +234,7 @@ exercise gem functionality. The testbed exists to be reshaped.
 
 **Gems rebuild every boot.** The bundle volume is per-variant
 (`woods-testbed-bundle-rails-8`, `woods-testbed-bundle-rails-7-2`,
-`woods-testbed-bundle-rails-6-0`).
+`woods-testbed-bundle-rails-6-0`, `woods-testbed-bundle-rails-8-large`).
 Rebuilding shouldn't happen unless the `Gemfile.lock` changed — if it
 does, check that the volume wasn't recreated.
 
