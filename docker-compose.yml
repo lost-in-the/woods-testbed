@@ -20,6 +20,11 @@ x-common-env: &common-env
   RAILS_ENV: development
   WOODS_GEM_PATH: /woods-gem
   BUNDLE_SILENCE_ROOT_WARNING: "1"
+  # Test-only bearer token for the HTTP Console MCP endpoint. The gem
+  # refuses every guarded request with 401 until a 32+ character token is
+  # set, so a fixed one here keeps the endpoint usable across variants.
+  # Never reuse it outside the testbed.
+  WOODS_CONSOLE_MCP_TOKEN: "woods-testbed-console-token-0123456789abcdef"
 
 services:
   rails-8.0:

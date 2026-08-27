@@ -220,10 +220,11 @@ docker compose exec rails-7.2 bin/rails console
   routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
   `apps/rails-6.0/README.md`.
 - **All variants:** a `config/initializers/woods_console.rb` that enables
-  Console MCP and a baseline set of redacted columns. No
-  `console_mcp_token` is set, so the gem warns at boot and serves the
-  Console MCP endpoint unauthenticated. That is deliberate for a
-  throwaway testbed; never copy the initializer into a real app.
+  Console MCP and a baseline set of redacted columns. The bearer token
+  comes from `WOODS_CONSOLE_MCP_TOKEN` in `docker-compose.yml` (a fixed,
+  test-only value). Without a token the gem refuses every Console MCP
+  request with 401, so a bare `bin/rails server` outside compose has the
+  endpoint enabled but inaccessible.
 
 Agents have permission to modify anything under `apps/` — add models,
 migrations, controllers, initializers, or fixtures as needed to
