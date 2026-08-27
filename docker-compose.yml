@@ -145,6 +145,16 @@ services:
       timeout: 4s
       retries: 25
 
+  # Redis: cache/queue backend for exercising gem paths that assume one.
+  # Same opt-in profile as the storage backends above; app containers reach
+  # it over the compose network as `redis`, the host port is for smoke runs.
+  redis:
+    profiles: [backends]
+    image: redis:7-alpine
+    container_name: woods-testbed-redis
+    ports:
+      - "${REDIS_PORT:-56379}:6379"
+
 volumes:
   bundle-rails-8:
     name: woods-testbed-bundle-rails-8
