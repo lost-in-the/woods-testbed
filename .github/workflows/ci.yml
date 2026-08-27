@@ -208,8 +208,12 @@ jobs:
         if: always()
         working-directory: woods-testbed
         run: |
-          manifest="apps/${{ matrix.variant }}/tmp/woods/manifest.json"
-          [ -f "$manifest" ] || { echo "no manifest — extraction did not complete"; exit 0; }
+          # Woods 2.0 publishes into payloads/gen-N/ and generation.json names
+          # the current one; only pre-payload indexes keep a flat manifest.json.
+          index="apps/${{ matrix.variant }}/tmp/woods"
+          gen=$(ruby -rjson -e 'puts JSON.parse(File.read(ARGV[0]))["payload"].to_s' "$index/generation.json" 2>/dev/null || true)
+          manifest="$index/${gen:-.}/manifest.json"
+          [ -f "$manifest" ] || { echo "::error::no manifest at $manifest: extraction did not complete"; exit 1; }
           ruby -rjson -e '
             m = JSON.parse(File.read(ARGV[0], encoding: "UTF-8"))
             counts = m["counts"] || {}
