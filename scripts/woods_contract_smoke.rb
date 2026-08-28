@@ -390,9 +390,9 @@ begin
   end
 
   checks += 1
-  masked = safe_context.redact('name' => 'Leah', 'email' => 'leah@example.com')
+  masked = safe_context.redact('name' => 'Example User', 'email' => 'user@example.test')
   violation(violations, "redaction guard: redact left redacted 'email' unmasked") unless masked['email'] == '[REDACTED]'
-  violation(violations, "redaction guard: redact masked non-redacted 'name'") if masked['name'] != 'Leah'
+  violation(violations, "redaction guard: redact masked non-redacted 'name'") if masked['name'] != 'Example User'
 rescue LoadError, NameError => e
   checks += 1
   violation(violations, "sql guardrails: woods console classes not loadable (#{e.class}: #{e.message})")

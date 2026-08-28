@@ -36,6 +36,10 @@
 # Runs against whatever woods the variant's bundle mounts (WOODS_GEM_PATH),
 # so it gates the fix per variant. Expected to FAIL, with the exact
 # exception in the FAIL line, until the gem-side fix lands.
+#
+# Fixture policy: the temp index is removed when the smoke passes and left
+# in place for inspection on any failure (its path is printed in the
+# summary), so a red run always carries its evidence.
 
 require 'digest'
 require 'fileutils'
@@ -165,17 +169,24 @@ end
 # stdout must stay protocol-only.
 
 MCP_EXECUTABLE = File.join(ENV.fetch('WOODS_GEM_PATH', '/woods-gem'), 'exe', 'woods-mcp')
-MCP_CHILD_TIMEOUT = 20 # seconds before the watchdog kills the child, so the smoke cannot hang
+# Seconds before the watchdog kills the child, so the smoke cannot hang. Env
+# knob: CI containers can be slow, and the hang regression wants a short value.
+MCP_CHILD_TIMEOUT = ENV.fetch('WOODS_MCP_CHILD_TIMEOUT', '20').to_i
 
 # Spawn the executable and run one JSON-RPC conversation against it.
 #
-# All requests are written up front and stdin is closed, so the transport
-# sees EOF after the last line and exits on its own; a child that never
-# finishes is killed by the watchdog. stderr is drained on its own thread so
+# Returns [stdout_lines, stderr_text, process_status, timed_out]. All requests
+# are written up front and stdin is closed, so the transport sees EOF after
+# the last line and exits on its own. The child join is bounded and its
+# Process::Status is always returned: a child that emits valid responses and
+# then exits non-zero, or hangs until the watchdog kills it, is reported —
+# neither may pass the smoke silently. stderr is drained on its own thread so
 # warnings cannot fill the pipe and deadlock the child.
 def json_rpc_exchange(executable, index_dir, requests)
   stdout_lines = []
   stderr_text = []
+  timed_out = false
+  child_status = nil
   env = {
     'LANG' => 'C',
     'LC_ALL' => 'C',
@@ -189,6 +200,7 @@ def json_rpc_exchange(executable, index_dir, requests)
 
     watchdog = Thread.new do
       sleep MCP_CHILD_TIMEOUT
+      timed_out = true
       begin
         Process.kill('TERM', -wait_thr.pid) # negative pid: the whole process group
         wait_thr.join(5)
@@ -202,13 +214,24 @@ def json_rpc_exchange(executable, index_dir, requests)
       stdout_lines << line.chomp
     end
 
-    watchdog.kill if watchdog&.alive?
-    watchdog&.join(5)
+    watchdog.kill if watchdog.alive? # clean EOF: stand the watchdog down
+    watchdog.join(5)
+    # Bounded join: a child that closed stdout but lives on cannot hang us.
+    wait_thr.join(MCP_CHILD_TIMEOUT)
+    if wait_thr.alive?
+      timed_out = true
+      begin
+        Process.kill('KILL', -wait_thr.pid)
+      rescue StandardError
+        nil
+      end
+    end
+    child_status = wait_thr.value # reaps the child and returns its Process::Status
     stderr_drain.join(5)
     stdout.close
     stderr.close
   end
-  [stdout_lines, stderr_text.join]
+  [stdout_lines, stderr_text.join, child_status, timed_out]
 end
 
 puts
@@ -236,32 +259,43 @@ structure_call = {
   params: { name: 'structure', arguments: {} }
 }
 
-stdout_lines, stderr_text = json_rpc_exchange(
+stdout_lines, stderr_text, child_status, child_timed_out = json_rpc_exchange(
   MCP_EXECUTABLE, index_dir,
   [initialize_request, initialized_notification, lookup_call, structure_call]
 )
 
-parsed_messages = stdout_lines.map do |line|
-  next if line.strip.empty?
+# The parse lives inside the purity assert: a blank or non-JSON line fails
+# HERE with its own message rather than being silently discarded. Blank
+# lines are not JSON-RPC messages — no compact, no skipping.
+parsed_messages = []
 
-  begin
-    JSON.parse(line)
-  rescue JSON::ParserError => e
-    raise "non-JSON stdout line: #{line[0, 120].inspect} (#{e.class})"
+results << assert('every stdout line is valid JSON-RPC (protocol-only stdout)') do
+  raise 'no stdout at all (stderr: ' + stderr_text[0, 300].inspect + ')' if stdout_lines.empty?
+  raise 'blank line on stdout — not a JSON-RPC message (protocol violation)' if stdout_lines.any? { |line| line.strip.empty? }
+
+  parsed_messages = stdout_lines.map do |line|
+    begin
+      JSON.parse(line)
+    rescue JSON::ParserError => e
+      raise "non-JSON stdout line: #{line[0, 120].inspect} (#{e.class})"
+    end
   end
-end.compact
+
+  bad = parsed_messages.grep(Hash).reject { |message| message['jsonrpc'] == '2.0' }
+  raise "messages without jsonrpc 2.0 envelope: #{bad.inspect}" unless bad.empty?
+end
+
+results << assert('child exits cleanly on stdin EOF (status 0, watchdog never fired)') do
+  raise "the watchdog killed the child (no clean exit within #{MCP_CHILD_TIMEOUT}s)" if child_timed_out
+
+  raise "child was killed by signal #{child_status.termsig}" unless child_status.exited?
+  raise "child exited with status #{child_status.exitstatus}" unless child_status.exitstatus.zero?
+end
 
 results << assert('executable boots and answers initialize under a C locale') do
   initialize_response = parsed_messages.grep(Hash).find { |message| message['id'] == 1 }
   raise "no initialize response on stdout (stderr: #{stderr_text[0, 300].inspect})" unless initialize_response
   raise "initialize errored: #{initialize_response['error'].inspect}" if initialize_response['error']
-end
-
-results << assert('every stdout line is valid JSON-RPC (protocol-only stdout)') do
-  raise 'no stdout at all (stderr: ' + stderr_text[0, 300].inspect + ')' if parsed_messages.empty?
-
-  bad = parsed_messages.grep(Hash).reject { |message| message['jsonrpc'] == '2.0' }
-  raise "messages without jsonrpc 2.0 envelope: #{bad.inspect}" unless bad.empty?
 end
 
 structure_response = parsed_messages.grep(Hash).find { |message| message['id'] == 3 }
@@ -303,5 +337,10 @@ puts '=== Summary ==='
 passed = results.count(true)
 failed = results.count(false)
 puts "passed: #{passed}    failed: #{failed}    total: #{results.size}"
-puts "fixture left in place for inspection: #{fixture_root}" unless failed.zero?
+if failed.zero?
+  # Fixture policy (see header): a passing run leaves nothing behind.
+  FileUtils.remove_entry(fixture_root)
+else
+  puts "fixture left in place for inspection: #{fixture_root}"
+end
 exit(failed.zero? ? 0 : 1)

@@ -1,0 +1,33 @@
+# Flat (no YAML anchors/aliases): Rails 6.0 loads database.yml without
+# `aliases: true`, which Psych 4+ rejects (Psych::AliasesNotEnabled), so a
+# `<<: *default` merge would break under a newer Psych.
+#
+# Connection details come from the compose mysql service's own environment
+# (MYSQL_ROOT_PASSWORD / MYSQL_DATABASE), so the app and the server cannot
+# drift apart.
+development:
+  adapter: mysql2
+  encoding: utf8mb4
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("MYSQL_HOST") { "mysql" } %>
+  username: root
+  password: <%= ENV.fetch("MYSQL_ROOT_PASSWORD") { "woods" } %>
+  database: <%= ENV.fetch("MYSQL_DATABASE") { "woods_testbed" } %>
+
+test:
+  adapter: mysql2
+  encoding: utf8mb4
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("MYSQL_HOST") { "mysql" } %>
+  username: root
+  password: <%= ENV.fetch("MYSQL_ROOT_PASSWORD") { "woods" } %>
+  database: <%= ENV.fetch("MYSQL_DATABASE") { "woods_testbed" } %>
+
+production:
+  adapter: mysql2
+  encoding: utf8mb4
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("MYSQL_HOST") { "mysql" } %>
+  username: root
+  password: <%= ENV.fetch("MYSQL_ROOT_PASSWORD") { "woods" } %>
+  database: <%= ENV.fetch("MYSQL_DATABASE") { "woods_testbed" } %>
