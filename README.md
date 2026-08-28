@@ -219,6 +219,10 @@ docker compose exec rails-7.2 bin/rails console
 - **`rails-6.0`:** a minimal `Post`/`Comment` app (controller, job, mailer,
   routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
   `apps/rails-6.0/README.md`.
+- **`rails-8.0` / `rails-7.2` / `rails-6.0`:** an `app/services/domain/container/`
+  wrapper-collision fixture (`Parser` and `Renderer`, both opening the same
+  `Container` wrapper) for the woods G-1 identifier fix — each file must
+  extract as the inner class, not the wrapper.
 - **All variants:** a `config/initializers/woods_console.rb` that enables
   Console MCP and a baseline set of redacted columns. The bearer token
   comes from `WOODS_CONSOLE_MCP_TOKEN` in `docker-compose.yml` (a fixed,
