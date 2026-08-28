@@ -195,6 +195,23 @@ jobs:
           done
           exit $status
 
+      # The container half of the woods#252 cross-UID proof ran inside the
+      # smoke scripts: it wrote watch_status.json (the one artifact widened to
+      # 0644) and permission_proof.json into the mounted index dir as the
+      # container UID. This step plays the documented consumer — a host-side
+      # hook reading the status file through the mount as a different UID —
+      # and re-asserts every payload artifact stays 0600 and unreadable here.
+      #
+      # Ordering is load-bearing: it must run BEFORE the ownership step below,
+      # because chown -R to the runner user erases exactly the UID boundary
+      # this proof depends on. Lives in scripts/tools/ so the in-container
+      # smoke loop (scripts/*.rb, non-recursive glob) never runs it — as root
+      # and owner, the container cannot fail a read, so the assertion is
+      # meaningless there.
+      - name: Prove cross-UID permissions from the host
+        working-directory: woods-testbed
+        run: ruby scripts/tools/woods_permission_proof_check.rb "apps/${{ matrix.variant }}/tmp/woods"
+
       # Everything under tmp/woods was written by root inside the container and
       # bind-mounted out, so the runner user cannot read it — both the coverage
       # reporter and the artifact upload fail with EACCES without this. Invisible
