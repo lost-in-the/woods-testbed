@@ -39,8 +39,11 @@ jobs:
 
       - name: Ruby scripts parse
         run: |
-          for f in scripts/*.rb; do ruby -c "$f" >/dev/null; done
+          for f in scripts/*.rb scripts/support/*.rb scripts/tools/*.rb; do ruby -c "$f" >/dev/null; done
           echo "all scripts parse"
+
+      - name: MCP executable exchange helper self-tests
+        run: ruby scripts/tools/mcp_executable_exchange_self_test.rb
 
       # The gem is checked out here too — cheap, no build — so the contract's
       # type keys can be validated against IndexReader::TYPE_DIRS rather than
@@ -80,6 +83,7 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.ccr.yml config --quiet
+          ruby scripts/tools/readme_compose_consistency_check.rb
           echo "compose OK"
 
   # Boot each variant for real and run a full extraction against it. This is the

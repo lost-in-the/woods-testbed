@@ -55,7 +55,7 @@ stage_ca_bundles() {
   done < <(ca_bundle_targets)
 }
 
-# shellcheck disable=SC2317  # reached via the EXIT trap, not a direct call
+# shellcheck disable=SC2317,SC2329  # reached via the EXIT trap, not a direct call
 restore_ca_placeholders() {
   local target
   while read -r target; do

@@ -44,10 +44,10 @@
 require 'digest'
 require 'fileutils'
 require 'json'
-require 'open3'
 require 'tmpdir'
 require 'woods/dependency_graph'
 require 'woods/mcp/index_reader'
+require_relative 'support/mcp_executable_exchange'
 
 results = []
 
@@ -171,68 +171,7 @@ end
 MCP_EXECUTABLE = File.join(ENV.fetch('WOODS_GEM_PATH', '/woods-gem'), 'exe', 'woods-mcp')
 # Seconds before the watchdog kills the child, so the smoke cannot hang. Env
 # knob: CI containers can be slow, and the hang regression wants a short value.
-MCP_CHILD_TIMEOUT = ENV.fetch('WOODS_MCP_CHILD_TIMEOUT', '20').to_i
-
-# Spawn the executable and run one JSON-RPC conversation against it.
-#
-# Returns [stdout_lines, stderr_text, process_status, timed_out]. All requests
-# are written up front and stdin is closed, so the transport sees EOF after
-# the last line and exits on its own. The child join is bounded and its
-# Process::Status is always returned: a child that emits valid responses and
-# then exits non-zero, or hangs until the watchdog kills it, is reported —
-# neither may pass the smoke silently. stderr is drained on its own thread so
-# warnings cannot fill the pipe and deadlock the child.
-def json_rpc_exchange(executable, index_dir, requests)
-  stdout_lines = []
-  stderr_text = []
-  timed_out = false
-  child_status = nil
-  env = {
-    'LANG' => 'C',
-    'LC_ALL' => 'C',
-    'OPENAI_API_KEY' => nil,                       # no provider autodetect
-    'OLLAMA_BASE_URL' => 'http://127.0.0.1:19999'  # dead port, as the gem's own CLI specs use
-  }
-  Open3.popen3(env, executable, index_dir, pgroup: true) do |stdin, stdout, stderr, wait_thr|
-    stderr_drain = Thread.new { stderr_text << stderr.read }
-    requests.each { |request| stdin.puts(JSON.generate(request)) }
-    stdin.close
-
-    watchdog = Thread.new do
-      sleep MCP_CHILD_TIMEOUT
-      timed_out = true
-      begin
-        Process.kill('TERM', -wait_thr.pid) # negative pid: the whole process group
-        wait_thr.join(5)
-        Process.kill('KILL', -wait_thr.pid) if wait_thr.alive?
-      rescue StandardError
-        nil # the child already exited
-      end
-    end
-
-    while (line = stdout.gets)
-      stdout_lines << line.chomp
-    end
-
-    watchdog.kill if watchdog.alive? # clean EOF: stand the watchdog down
-    watchdog.join(5)
-    # Bounded join: a child that closed stdout but lives on cannot hang us.
-    wait_thr.join(MCP_CHILD_TIMEOUT)
-    if wait_thr.alive?
-      timed_out = true
-      begin
-        Process.kill('KILL', -wait_thr.pid)
-      rescue StandardError
-        nil
-      end
-    end
-    child_status = wait_thr.value # reaps the child and returns its Process::Status
-    stderr_drain.join(5)
-    stdout.close
-    stderr.close
-  end
-  [stdout_lines, stderr_text.join, child_status, timed_out]
-end
+MCP_CHILD_TIMEOUT = ENV.fetch('WOODS_MCP_CHILD_TIMEOUT', '20').to_f
 
 puts
 puts '=== Section 3: packaged stdio executable under LANG=C / LC_ALL=C ==='
@@ -259,9 +198,17 @@ structure_call = {
   params: { name: 'structure', arguments: {} }
 }
 
-stdout_lines, stderr_text, child_status, child_timed_out = json_rpc_exchange(
-  MCP_EXECUTABLE, index_dir,
-  [initialize_request, initialized_notification, lookup_call, structure_call]
+exchange_result = McpExecutableExchange.json_rpc_exchange(
+  command: MCP_EXECUTABLE,
+  index_dir: index_dir,
+  requests: [initialize_request, initialized_notification, lookup_call, structure_call],
+  timeout: MCP_CHILD_TIMEOUT,
+  env: {
+    'LANG' => 'C',
+    'LC_ALL' => 'C',
+    'OPENAI_API_KEY' => nil,                       # no provider autodetect
+    'OLLAMA_BASE_URL' => 'http://127.0.0.1:19999'  # dead port, as the gem's own CLI specs use
+  }
 )
 
 # The parse lives inside the purity assert: a blank or non-JSON line fails
@@ -270,58 +217,26 @@ stdout_lines, stderr_text, child_status, child_timed_out = json_rpc_exchange(
 parsed_messages = []
 
 results << assert('every stdout line is valid JSON-RPC (protocol-only stdout)') do
-  raise 'no stdout at all (stderr: ' + stderr_text[0, 300].inspect + ')' if stdout_lines.empty?
-  raise 'blank line on stdout — not a JSON-RPC message (protocol violation)' if stdout_lines.any? { |line| line.strip.empty? }
-
-  parsed_messages = stdout_lines.map do |line|
-    begin
-      JSON.parse(line)
-    rescue JSON::ParserError => e
-      raise "non-JSON stdout line: #{line[0, 120].inspect} (#{e.class})"
-    end
-  end
-
-  bad = parsed_messages.grep(Hash).reject { |message| message['jsonrpc'] == '2.0' }
-  raise "messages without jsonrpc 2.0 envelope: #{bad.inspect}" unless bad.empty?
+  parsed_messages = McpExecutableExchange.parse_protocol_stdout!(exchange_result)
 end
 
 results << assert('child exits cleanly on stdin EOF (status 0, watchdog never fired)') do
-  raise "the watchdog killed the child (no clean exit within #{MCP_CHILD_TIMEOUT}s)" if child_timed_out
-
-  raise "child was killed by signal #{child_status.termsig}" unless child_status.exited?
-  raise "child exited with status #{child_status.exitstatus}" unless child_status.exitstatus.zero?
+  McpExecutableExchange.validate_clean_exit!(exchange_result, timeout: MCP_CHILD_TIMEOUT)
 end
 
 results << assert('executable boots and answers initialize under a C locale') do
-  initialize_response = parsed_messages.grep(Hash).find { |message| message['id'] == 1 }
-  raise "no initialize response on stdout (stderr: #{stderr_text[0, 300].inspect})" unless initialize_response
+  initialize_response = McpExecutableExchange.response_for!(parsed_messages, 1)
   raise "initialize errored: #{initialize_response['error'].inspect}" if initialize_response['error']
 end
 
-structure_response = parsed_messages.grep(Hash).find { |message| message['id'] == 3 }
-
 results << assert('structure (manifest-serving tool) is not corrupt_artifact') do
-  raise 'no response to tools/call structure' unless structure_response
-
-  result = structure_response['result'] || {}
-  raise "structure errored at the JSON-RPC layer: #{structure_response['error'].inspect}" if structure_response['error']
-  raise "structure result is not a Hash: #{result.inspect}" unless result.is_a?(Hash)
-  next unless result['isError']
-
-  code = result.dig('_meta', 'error_code') || result.dig('structuredContent', 'error_code')
-  raise "tool error (#{code}): #{result.dig('content', 0, 'text').to_s[0, 200].inspect}"
+  structure_response = McpExecutableExchange.response_for!(parsed_messages, 3)
+  McpExecutableExchange.assert_tool_success!(structure_response, tool_name: 'structure')
 end
 
-lookup_response = parsed_messages.grep(Hash).find { |message| message['id'] == 2 }
-
 results << assert('café round-trips intact through the lookup response') do
-  raise 'no lookup response to check' unless lookup_response
-
-  result = lookup_response['result'] || {}
-  if result['isError']
-    code = result.dig('_meta', 'error_code') || result.dig('structuredContent', 'error_code')
-    raise "lookup tool error (#{code}): #{result.dig('content', 0, 'text').to_s[0, 200].inspect}"
-  end
+  lookup_response = McpExecutableExchange.response_for!(parsed_messages, 2)
+  result = McpExecutableExchange.assert_tool_success!(lookup_response, tool_name: 'lookup')
 
   text = result.dig('content', 0, 'text')
   raise 'no content text in lookup response' unless text
