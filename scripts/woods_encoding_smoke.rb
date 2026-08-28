@@ -23,6 +23,16 @@
 # Woods::MCP::IndexReader.new(dir), #manifest, #list_units, #find_unit,
 # #dependency_graph.
 #
+# Section 3 additionally launches the packaged stdio executable the way an
+# MCP client does: /woods-gem/exe/woods-mcp spawned with LANG=C / LC_ALL=C,
+# fed a JSON-RPC initialize + tools/call over stdin. It asserts protocol-only
+# stdout (every line valid JSON-RPC), a non-corrupt_artifact response from
+# the manifest-serving `structure` tool, and that the café value round-trips
+# intact through the `lookup` response. Contract-first for the packaged-
+# executable half of the fix, gem PR lost-in-the/woods#247: until it lands
+# the executable's C-locale manifest read dies and structure answers
+# corrupt_artifact, while unit data loaded at boot already survives.
+#
 # Runs against whatever woods the variant's bundle mounts (WOODS_GEM_PATH),
 # so it gates the fix per variant. Expected to FAIL, with the exact
 # exception in the FAIL line, until the gem-side fix lands.
@@ -30,6 +40,7 @@
 require 'digest'
 require 'fileutils'
 require 'json'
+require 'open3'
 require 'tmpdir'
 require 'woods/dependency_graph'
 require 'woods/mcp/index_reader'
@@ -140,6 +151,149 @@ begin
   end
 ensure
   Encoding.default_external = original_external
+end
+
+# ── Section 3: packaged stdio executable under LANG=C / LC_ALL=C ─────────
+#
+# Contract-first (gem PR lost-in-the/woods#247): launches the packaged
+# executable as a real MCP client would, under a C locale, and asserts the
+# wire contract. Protocol purity and the café round-trip through lookup hold
+# even against today's gem — unit data is loaded at boot through UTF-8-safe
+# reads. The failure this section gates is the manifest-serving `structure`
+# tool: the child's C-locale manifest read dies and it answers
+# corrupt_artifact. stderr is kept separate; warnings are allowed there,
+# stdout must stay protocol-only.
+
+MCP_EXECUTABLE = File.join(ENV.fetch('WOODS_GEM_PATH', '/woods-gem'), 'exe', 'woods-mcp')
+MCP_CHILD_TIMEOUT = 20 # seconds before the watchdog kills the child, so the smoke cannot hang
+
+# Spawn the executable and run one JSON-RPC conversation against it.
+#
+# All requests are written up front and stdin is closed, so the transport
+# sees EOF after the last line and exits on its own; a child that never
+# finishes is killed by the watchdog. stderr is drained on its own thread so
+# warnings cannot fill the pipe and deadlock the child.
+def json_rpc_exchange(executable, index_dir, requests)
+  stdout_lines = []
+  stderr_text = []
+  env = {
+    'LANG' => 'C',
+    'LC_ALL' => 'C',
+    'OPENAI_API_KEY' => nil,                       # no provider autodetect
+    'OLLAMA_BASE_URL' => 'http://127.0.0.1:19999'  # dead port, as the gem's own CLI specs use
+  }
+  Open3.popen3(env, executable, index_dir, pgroup: true) do |stdin, stdout, stderr, wait_thr|
+    stderr_drain = Thread.new { stderr_text << stderr.read }
+    requests.each { |request| stdin.puts(JSON.generate(request)) }
+    stdin.close
+
+    watchdog = Thread.new do
+      sleep MCP_CHILD_TIMEOUT
+      begin
+        Process.kill('TERM', -wait_thr.pid) # negative pid: the whole process group
+        wait_thr.join(5)
+        Process.kill('KILL', -wait_thr.pid) if wait_thr.alive?
+      rescue StandardError
+        nil # the child already exited
+      end
+    end
+
+    while (line = stdout.gets)
+      stdout_lines << line.chomp
+    end
+
+    watchdog.kill if watchdog&.alive?
+    watchdog&.join(5)
+    stderr_drain.join(5)
+    stdout.close
+    stderr.close
+  end
+  [stdout_lines, stderr_text.join]
+end
+
+puts
+puts '=== Section 3: packaged stdio executable under LANG=C / LC_ALL=C ==='
+
+results << assert('packaged executable exists and is runnable') do
+  raise "not found or not executable: #{MCP_EXECUTABLE} (set WOODS_GEM_PATH)" unless File.executable?(MCP_EXECUTABLE)
+end
+
+initialize_request = {
+  jsonrpc: '2.0', id: 1, method: 'initialize',
+  params: { protocolVersion: '2024-11-05', capabilities: {},
+            clientInfo: { name: 'woods-encoding-smoke', version: '1.0' } }
+}
+initialized_notification = { jsonrpc: '2.0', method: 'notifications/initialized' }
+lookup_call = {
+  jsonrpc: '2.0', id: 2, method: 'tools/call',
+  params: { name: 'lookup', arguments: { identifier: 'Post' } }
+}
+# structure is the tool that serves the manifest — the read that dies under a
+# C locale today. lookup/search serve unit data loaded at boot and already
+# survive, so they are the round-trip surface, not the contract gate.
+structure_call = {
+  jsonrpc: '2.0', id: 3, method: 'tools/call',
+  params: { name: 'structure', arguments: {} }
+}
+
+stdout_lines, stderr_text = json_rpc_exchange(
+  MCP_EXECUTABLE, index_dir,
+  [initialize_request, initialized_notification, lookup_call, structure_call]
+)
+
+parsed_messages = stdout_lines.map do |line|
+  next if line.strip.empty?
+
+  begin
+    JSON.parse(line)
+  rescue JSON::ParserError => e
+    raise "non-JSON stdout line: #{line[0, 120].inspect} (#{e.class})"
+  end
+end.compact
+
+results << assert('executable boots and answers initialize under a C locale') do
+  initialize_response = parsed_messages.grep(Hash).find { |message| message['id'] == 1 }
+  raise "no initialize response on stdout (stderr: #{stderr_text[0, 300].inspect})" unless initialize_response
+  raise "initialize errored: #{initialize_response['error'].inspect}" if initialize_response['error']
+end
+
+results << assert('every stdout line is valid JSON-RPC (protocol-only stdout)') do
+  raise 'no stdout at all (stderr: ' + stderr_text[0, 300].inspect + ')' if parsed_messages.empty?
+
+  bad = parsed_messages.grep(Hash).reject { |message| message['jsonrpc'] == '2.0' }
+  raise "messages without jsonrpc 2.0 envelope: #{bad.inspect}" unless bad.empty?
+end
+
+structure_response = parsed_messages.grep(Hash).find { |message| message['id'] == 3 }
+
+results << assert('structure (manifest-serving tool) is not corrupt_artifact') do
+  raise 'no response to tools/call structure' unless structure_response
+
+  result = structure_response['result'] || {}
+  raise "structure errored at the JSON-RPC layer: #{structure_response['error'].inspect}" if structure_response['error']
+  raise "structure result is not a Hash: #{result.inspect}" unless result.is_a?(Hash)
+  next unless result['isError']
+
+  code = result.dig('_meta', 'error_code') || result.dig('structuredContent', 'error_code')
+  raise "tool error (#{code}): #{result.dig('content', 0, 'text').to_s[0, 200].inspect}"
+end
+
+lookup_response = parsed_messages.grep(Hash).find { |message| message['id'] == 2 }
+
+results << assert('café round-trips intact through the lookup response') do
+  raise 'no lookup response to check' unless lookup_response
+
+  result = lookup_response['result'] || {}
+  if result['isError']
+    code = result.dig('_meta', 'error_code') || result.dig('structuredContent', 'error_code')
+    raise "lookup tool error (#{code}): #{result.dig('content', 0, 'text').to_s[0, 200].inspect}"
+  end
+
+  text = result.dig('content', 0, 'text')
+  raise 'no content text in lookup response' unless text
+
+  raise "#{text.encoding} output not valid" unless text.valid_encoding?
+  raise "café missing or mangled in response: #{text[0, 200].inspect}" unless text.include?('café')
 end
 
 # ── Summary ──

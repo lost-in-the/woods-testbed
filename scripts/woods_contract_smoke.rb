@@ -336,6 +336,15 @@ begin
     violation(violations, "sql guardrail: #{sql} was accepted") if sql_validator.valid?(sql)
   end
 
+  # MySQL dialect bypass (gem PR lost-in-the/woods#248): `#` opens a line
+  # comment in MySQL, so the lock clause hides mid-statement from a scanner
+  # that anchors LOCK to statement-leader positions and strips only `--` and
+  # `/* */` comments. Contract-first: accepted until the dual-dialect lock
+  # check lands.
+  checks += 1
+  mysql_lock = "SELECT * FROM users LOCK # mysql comment\nIN SHARE MODE"
+  violation(violations, "sql guardrail (mysql # comment): #{mysql_lock.inspect} was accepted") if sql_validator.valid?(mysql_lock)
+
   # A data-modifying CTE hidden as the *second* CTE. The writable-CTE scan
   # must see past a benign first CTE; RETURNING makes the write explicit.
   checks += 1
