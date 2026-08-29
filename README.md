@@ -5,10 +5,11 @@ gem against a real, booted Rails environment. The gem can't be fully
 validated by unit tests alone: extraction and the Console MCP server
 both require a live Rails boot with models, routes, and a database.
 
-This repo carries **one Rails app per supported Rails version**. They're
-minimal forks of the [Rails Tutorial sample app](https://github.com/mhartl/sample_app_6th_ed)
-with the woods gem wired in and a handful of woods-specific smoke
-scripts that assert behavioural invariants.
+This repo carries **one Rails app per supported Rails version**, plus targeted
+adapter and scale variants where a version-only matrix would miss behaviour.
+They're minimal forks of the [Rails Tutorial sample app](https://github.com/mhartl/sample_app_6th_ed)
+or deliberately small fixtures with the woods gem wired in and a handful of
+woods-specific smoke scripts that assert behavioural invariants.
 
 ## Variants
 
@@ -18,6 +19,7 @@ scripts that assert behavioural invariants.
 | `apps/rails-7.2` | ~> 7.2.0 | 3.3.1 | 3011 | `woods-testbed-rails-7.2` |
 | `apps/rails-6.0` | ~> 6.0.0 | 3.0 | 3012 | `woods-testbed-rails-6.0` |
 | `apps/rails-8.0-large` | 8.0.x | 3.3.1 | 3013 | `woods-testbed-rails-8.0-large` |
+| `apps/rails-6.0-mysql` | ~> 6.0.0 | 3.0 | 3014 | `woods-testbed-rails-6.0-mysql` |
 
 The 8.0 and 7.2 variants are minimal forks of the Rails Tutorial sample app.
 The **rails-6.0** variant — the supported floor (`railties >= 6.0`, woods #135)
@@ -28,8 +30,13 @@ aren't installed on most dev machines.
 
 The **rails-8.0-large** variant is a large synthetic app for scale
 benchmarks (incremental latency, whole-app re-run cost, daemon memory). It
-exists to measure scale, not version behaviour, and is the only variant
-whose `Dockerfile` runs `db:prepare` at boot.
+exists to measure scale, not version behaviour. Its `Dockerfile` runs
+`db:prepare` at boot, as does the MySQL contract variant.
+
+The **rails-6.0-mysql** variant is the Rails 6.0 floor app wired to `mysql2`
+instead of SQLite. It rides the `backends` Compose profile with the shared
+`mysql` service and exists for adapter/dialect contracts, especially Console
+SQL paths that must reach a real MySQL connection.
 
 Each variant has its own `Gemfile`, its own bundle volume, and its own
 container. They share `scripts/` (woods smoke scripts) via a read-only
@@ -37,7 +44,8 @@ bind mount at `/app/script/shared` inside the container.
 
 Contributing a new Rails version: copy an existing `apps/rails-X.Y`
 directory, edit the Gemfile pin, add a new service to
-`docker-compose.yml`, and update the table above.
+`docker-compose.yml`, and update the table above. CI checks that the variant
+table stays in sync with Compose service names, containers, and default ports.
 
 ## Prerequisites
 
@@ -92,7 +100,8 @@ woods-testbed/
 │   ├── rails-8.0/        Rails 8 variant (tutorial sample app)
 │   ├── rails-7.2/        Rails 7.2 variant
 │   ├── rails-6.0/        Rails 6.0 variant (supported floor, minimal)
-│   └── rails-8.0-large/  Rails 8 scale variant (synthetic, benchmarks)
+│   ├── rails-8.0-large/  Rails 8 scale variant (synthetic, benchmarks)
+│   └── rails-6.0-mysql/  Rails 6.0 + mysql2 dialect variant
 ├── bin/                  Host-side tooling: runs on your machine, not in a container
 │   ├── bootstrap_docker.sh              # start the Docker daemon if it isn't running
 │   └── ccr_compose.sh                   # docker compose wrapper for proxied sessions
@@ -102,9 +111,12 @@ woods-testbed/
 │   ├── woods_smoke.rb
 │   ├── woods_credentials_smoke.rb
 │   ├── woods_contract_smoke.rb          # kernel contract (rails-8.0-large)
+│   ├── woods_encoding_smoke.rb          # C-locale Index MCP executable contract
 │   ├── woods_embedding_smoke.rb         # embedding pipeline against a backend
+│   ├── woods_mysql_console_smoke.rb     # production-path MySQL Console SQL contract
 │   ├── woods_worktree_smoke.rb          # git provenance in worktrees (#137)
 │   ├── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
+│   ├── support/                         # shared helpers for smoke scripts
 │   └── tools/                           # generator + benchmark (not run by CI)
 └── docker-compose.yml
 ```
@@ -134,6 +146,9 @@ docker compose up rails-7.2
 
 # Both at once
 docker compose up
+
+# Rails 6.0 + MySQL dialect variant (requires the backends profile)
+docker compose --profile backends up -d mysql rails-6.0-mysql
 ```
 
 The first boot of each variant installs gems into a named volume, which
@@ -152,8 +167,12 @@ WOODS_GEM_PATH=/absolute/path/to/woods-feature-branch \
 ### Changing ports
 
 ```bash
-RAILS_8_PORT=4010 RAILS_72_PORT=4011 RAILS_60_PORT=4012 RAILS_8_LARGE_PORT=4013 docker compose up
+RAILS_8_PORT=4010 RAILS_72_PORT=4011 RAILS_60_PORT=4012 RAILS_8_LARGE_PORT=4013 RAILS_60_MYSQL_PORT=4014 docker compose up
 ```
+
+`rails-6.0-mysql` is behind the `backends` profile, so `RAILS_60_MYSQL_PORT`
+only matters when that profile/service is started. The app container still
+listens on port 3000 internally; the variables above only change host ports.
 
 ## Running woods against a variant
 
@@ -194,6 +213,12 @@ docker compose exec rails-7.2 bin/rails runner script/shared/woods_smoke.rb
 # Git provenance in worktrees (#137) and extract-only Index Server boot (#138)
 docker compose exec rails-8.0 bin/rails runner script/shared/woods_worktree_smoke.rb
 docker compose exec rails-8.0 bin/rails runner script/shared/woods_extract_only_boot_smoke.rb
+
+# Encoding executable contract (contract-first red until woods#247 lands)
+docker compose exec rails-8.0 bin/rails runner script/shared/woods_encoding_smoke.rb
+
+# MySQL Console dialect contract (requires rails-6.0-mysql + mysql; contract-first red until woods#248 lands)
+docker compose exec rails-6.0-mysql bin/rails runner script/shared/woods_mysql_console_smoke.rb
 ```
 
 All scripts exit non-zero on failure, which makes them suitable for
@@ -223,6 +248,9 @@ docker compose exec rails-7.2 bin/rails console
   wrapper-collision fixture (`Parser` and `Renderer`, both opening the same
   `Container` wrapper) for the woods G-1 identifier fix — each file must
   extract as the inner class, not the wrapper.
+- **`rails-6.0-mysql`:** the same minimal Rails 6.0 shape with `mysql2`, a
+  `User` table for Console SQL dialect probes, and no credential fixtures. See
+  `apps/rails-6.0-mysql/README.md`.
 - **All variants:** a `config/initializers/woods_console.rb` that enables
   Console MCP and a baseline set of redacted columns. The bearer token
   comes from `WOODS_CONSOLE_MCP_TOKEN` in `docker-compose.yml` (a fixed,
@@ -238,7 +266,8 @@ exercise gem functionality. The testbed exists to be reshaped.
 
 **Gems rebuild every boot.** The bundle volume is per-variant
 (`woods-testbed-bundle-rails-8`, `woods-testbed-bundle-rails-7-2`,
-`woods-testbed-bundle-rails-6-0`, `woods-testbed-bundle-rails-8-large`).
+`woods-testbed-bundle-rails-6-0`, `woods-testbed-bundle-rails-8-large`,
+`woods-testbed-bundle-rails-6-0-mysql`).
 Rebuilding shouldn't happen unless the `Gemfile.lock` changed — if it
 does, check that the volume wasn't recreated.
 
