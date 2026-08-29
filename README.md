@@ -244,6 +244,10 @@ docker compose exec rails-7.2 bin/rails console
 - **`rails-6.0`:** a minimal `Post`/`Comment` app (controller, job, mailer,
   routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
   `apps/rails-6.0/README.md`.
+- **`rails-8.0` / `rails-7.2` / `rails-6.0`:** an `app/services/domain/container/`
+  wrapper-collision fixture (`Parser` and `Renderer`, both opening the same
+  `Container` wrapper) for the woods G-1 identifier fix — each file must
+  extract as the inner class, not the wrapper.
 - **`rails-6.0-mysql`:** the same minimal Rails 6.0 shape with `mysql2`, a
   `User` table for Console SQL dialect probes, and no credential fixtures. See
   `apps/rails-6.0-mysql/README.md`.
