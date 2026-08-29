@@ -61,6 +61,17 @@ Dir.mktmpdir('mcp-executable-exchange-self-test') do |root|
     sleep 10
   RUBY
 
+  grandchild_hang = write_child(root, 'grandchild_hang', <<~'RUBY')
+    require 'json'
+    fork do
+      trap('TERM', 'IGNORE')
+      sleep 10
+    end
+    STDOUT.puts(JSON.generate('jsonrpc' => '2.0', 'id' => 1, 'result' => { 'ok' => true }))
+    STDOUT.flush
+    exit 0
+  RUBY
+
   results << assert('clean status-0 control passes protocol and exit validation') do
     result = run_child(clean_child)
     messages = McpExecutableExchange.validate_successful_exchange!(result, timeout: 1)
@@ -99,6 +110,21 @@ Dir.mktmpdir('mcp-executable-exchange-self-test') do |root|
       next
     end
     raise 'hanging child passed validation'
+  end
+
+  results << assert('TERM-immune grandchild holding stdout cannot hang the exchange') do
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = run_child(grandchild_hang, timeout: 0.5)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    raise "exchange remained blocked for #{elapsed.round(2)}s" if elapsed > 3
+
+    begin
+      McpExecutableExchange.validate_successful_exchange!(result, timeout: 0.5)
+    rescue McpExecutableExchange::ValidationError => e
+      raise unless e.message.include?('watchdog')
+      next
+    end
+    raise 'grandchild-held stdout passed validation'
   end
 end
 

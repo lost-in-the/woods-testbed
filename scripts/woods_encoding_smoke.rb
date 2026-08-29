@@ -45,8 +45,6 @@ require 'digest'
 require 'fileutils'
 require 'json'
 require 'tmpdir'
-require 'woods/dependency_graph'
-require 'woods/mcp/index_reader'
 require_relative 'support/mcp_executable_exchange'
 
 results = []
@@ -55,9 +53,21 @@ def assert(name, &block)
   block.call
   puts "  PASS  #{name}"
   true
-rescue StandardError => e
+rescue StandardError, LoadError => e
   puts "  FAIL  #{name}: #{e.class}: #{e.message}"
   false
+end
+
+results << assert('Woods reader classes load for the encoding contract') do
+  require 'woods/dependency_graph'
+  require 'woods/mcp/index_reader'
+end
+
+unless results.last
+  puts
+  puts '=== Summary ==='
+  puts "passed: #{results.count(true)}    failed: #{results.count(false)}    total: #{results.size}"
+  exit 1
 end
 
 # ── Section 1: build the published-generation fixture ────────────────────
@@ -121,9 +131,11 @@ original_external = Encoding.default_external
 begin
   Encoding.default_external = Encoding::US_ASCII
 
-  reader = Woods::MCP::IndexReader.new(index_dir)
-
-  results << assert('constructor accepts the payload-pointer index') { raise 'nil reader' if reader.nil? }
+  reader = nil
+  results << assert('constructor accepts the payload-pointer index') do
+    reader = Woods::MCP::IndexReader.new(index_dir)
+    raise 'nil reader' if reader.nil?
+  end
 
   results << assert('payload_dir resolves into the generation payload (pointer followed)') do
     resolved = reader.payload_dir
@@ -198,25 +210,25 @@ structure_call = {
   params: { name: 'structure', arguments: {} }
 }
 
-exchange_result = McpExecutableExchange.json_rpc_exchange(
-  command: MCP_EXECUTABLE,
-  index_dir: index_dir,
-  requests: [initialize_request, initialized_notification, lookup_call, structure_call],
-  timeout: MCP_CHILD_TIMEOUT,
-  env: {
-    'LANG' => 'C',
-    'LC_ALL' => 'C',
-    'OPENAI_API_KEY' => nil,                       # no provider autodetect
-    'OLLAMA_BASE_URL' => 'http://127.0.0.1:19999'  # dead port, as the gem's own CLI specs use
-  }
-)
-
 # The parse lives inside the purity assert: a blank or non-JSON line fails
 # HERE with its own message rather than being silently discarded. Blank
 # lines are not JSON-RPC messages — no compact, no skipping.
 parsed_messages = []
+exchange_result = nil
 
 results << assert('every stdout line is valid JSON-RPC (protocol-only stdout)') do
+  exchange_result = McpExecutableExchange.json_rpc_exchange(
+    command: MCP_EXECUTABLE,
+    index_dir: index_dir,
+    requests: [initialize_request, initialized_notification, lookup_call, structure_call],
+    timeout: MCP_CHILD_TIMEOUT,
+    env: {
+      'LANG' => 'C',
+      'LC_ALL' => 'C',
+      'OPENAI_API_KEY' => nil,                       # no provider autodetect
+      'OLLAMA_BASE_URL' => 'http://127.0.0.1:19999'  # dead port, as the gem's own CLI specs use
+    }
+  )
   parsed_messages = McpExecutableExchange.parse_protocol_stdout!(exchange_result)
 end
 

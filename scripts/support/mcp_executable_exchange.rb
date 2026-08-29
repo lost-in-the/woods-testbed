@@ -18,27 +18,24 @@ module McpExecutableExchange
     command_args = Array(command) + [index_dir]
 
     Open3.popen3(env, *command_args, pgroup: true) do |stdin, stdout, stderr, wait_thr|
+      deadline = monotonic_now + timeout
+      stdout_drain = Thread.new { stdout.each_line { |line| stdout_lines << line.chomp } }
       stderr_drain = Thread.new { stderr_chunks << stderr.read }
-      watchdog = start_watchdog(wait_thr, timeout) { timed_out = true }
+      stdout_drain.report_on_exception = false
+      stderr_drain.report_on_exception = false
 
       requests.each { |request| stdin.puts(JSON.generate(request)) }
       stdin.close
 
-      while (line = stdout.gets)
-        stdout_lines << line.chomp
+      completed = [wait_thr, stdout_drain, stderr_drain].all? do |thread|
+        join_before_deadline(thread, deadline)
       end
-
-      watchdog.kill if watchdog.alive?
-      watchdog.join(5)
-
-      unless wait_thr.join(timeout)
+      unless completed
         timed_out = true
-        kill_process_group(wait_thr.pid, 'KILL')
-        wait_thr.join(5)
+        terminate_process_group(wait_thr.pid, wait_thr, stdout_drain, stderr_drain)
       end
 
-      child_status = wait_thr.value
-      stderr_drain.join(5)
+      child_status = wait_thr.value unless wait_thr.alive?
     end
 
     Result.new(stdout_lines: stdout_lines, stderr_text: stderr_chunks.join,
@@ -105,18 +102,29 @@ module McpExecutableExchange
     raise ValidationError, "#{tool_name} tool error (#{code}): #{text.inspect}"
   end
 
-  def start_watchdog(wait_thr, timeout)
-    Thread.new do
-      sleep timeout
-      next unless wait_thr.alive?
-
-      yield
-      kill_process_group(wait_thr.pid, 'TERM')
-      wait_thr.join(5)
-      kill_process_group(wait_thr.pid, 'KILL') if wait_thr.alive?
-    end
+  def join_before_deadline(thread, deadline)
+    remaining = deadline - monotonic_now
+    thread.join(remaining) if remaining.positive?
+    !thread.alive?
   end
-  private_class_method :start_watchdog
+  private_class_method :join_before_deadline
+
+  def terminate_process_group(pid, *threads)
+    kill_process_group(pid, 'TERM')
+    grace_deadline = monotonic_now + 1
+    threads.each { |thread| join_before_deadline(thread, grace_deadline) }
+    # Always address the process group, even if its direct child has exited:
+    # a TERM-immune grandchild may still own stdout/stderr and keep a drain
+    # thread blocked forever.
+    kill_process_group(pid, 'KILL')
+    threads.each { |thread| thread.join(5) }
+  end
+  private_class_method :terminate_process_group
+
+  def monotonic_now
+    Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  end
+  private_class_method :monotonic_now
 
   def kill_process_group(pid, signal)
     Process.kill(signal, -pid)

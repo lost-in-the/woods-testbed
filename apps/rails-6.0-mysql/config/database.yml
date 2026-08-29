@@ -2,9 +2,9 @@
 # `aliases: true`, which Psych 4+ rejects (Psych::AliasesNotEnabled), so a
 # `<<: *default` merge would break under a newer Psych.
 #
-# Connection details come from the compose mysql service's own environment
-# (MYSQL_ROOT_PASSWORD / MYSQL_DATABASE), so the app and the server cannot
-# drift apart.
+# CI passes the compose mysql service's MYSQL_ROOT_PASSWORD / MYSQL_DATABASE
+# through to the app. When running outside compose, keep any overrides aligned
+# with the server; these application-side defaults cannot enforce that.
 development:
   adapter: mysql2
   encoding: utf8mb4

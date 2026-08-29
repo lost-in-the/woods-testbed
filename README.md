@@ -30,8 +30,8 @@ aren't installed on most dev machines.
 
 The **rails-8.0-large** variant is a large synthetic app for scale
 benchmarks (incremental latency, whole-app re-run cost, daemon memory). It
-exists to measure scale, not version behaviour, and is the only variant
-whose `Dockerfile` runs `db:prepare` at boot.
+exists to measure scale, not version behaviour. Its `Dockerfile` runs
+`db:prepare` at boot, as does the MySQL contract variant.
 
 The **rails-6.0-mysql** variant is the Rails 6.0 floor app wired to `mysql2`
 instead of SQLite. It rides the `backends` Compose profile with the shared
