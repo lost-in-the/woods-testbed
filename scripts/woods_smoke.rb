@@ -2,15 +2,20 @@
 
 # Run with:  bin/rails runner script/shared/woods_smoke.rb
 #
-# Smoke-tests the four PR 34 pre-merge fixes against a real Rails boot.
-# Version-agnostic: the header prints the detected Rails version so output
-# clearly reflects whichever variant invoked it.
+# Smoke-tests the four PR 34 pre-merge fixes and the G-1 wrapper naming fix
+# against a real Rails boot. Version-agnostic: the header prints the detected
+# Rails version so output clearly reflects whichever variant invoked it.
 #   1. RackMiddleware#build_embedded_server uses connection_pool.with_connection
 #      (no AR::Base.connection deprecation).
 #   2. TableGate rejects double-quoted schema-qualified identifiers.
 #   3. TableGate rejects MySQL STRAIGHT_JOIN.
 #   4. TableGate's blocked_tables symmetry — bare entries are wildcards,
 #      schema-qualified entries are schema-specific.
+#   5. G-1 wrapper fixtures: both files under app/services/domain/container/
+#      extract as their governed inner classes (Domain::Container::Parser,
+#      Domain::Container::Renderer) — as distinct units, never collapsed onto
+#      the wrapper — and an incremental run of one wrapper file preserves
+#      both. Variants without the fixtures skip this section.
 
 require 'woods/console/rack_middleware'
 require 'woods/console/server'
@@ -118,6 +123,128 @@ results << assert('bare users entry rejects FROM public.users (wildcard preserve
   raise 'expected TableGateError'
 rescue Woods::Console::TableGateError
   # expected
+end
+
+# ── Section 4: G-1 wrapper fixtures — governed naming, full vs incremental ──
+
+# Index summaries for one output dir: identifier => { 'type_dirs' => [...],
+# 'file_path' => '...' }. Same read path as woods_contract_smoke.rb: the gem
+# publishes under payloads/gen-N/ and names the current one in
+# generation.json; older gems wrote a flat index. A missing or empty index
+# simply yields an empty hash — the assertions below say so precisely.
+def woods_smoke_index_summaries(output_dir)
+  payload_dir =
+    begin
+      require 'woods/generation'
+      Woods::Generation.new(output_dir: output_dir).payload_dir
+    rescue LoadError, NameError
+      Pathname.new(output_dir.to_s)
+    end
+
+  summaries = {}
+  payload_dir.children.select(&:directory?).each do |dir|
+    index_file = dir.join('_index.json')
+    next unless index_file.file?
+
+    JSON.parse(index_file.read).each do |entry|
+      id = entry['identifier'].to_s
+      if (known = summaries[id])
+        known['type_dirs'] << dir.basename.to_s
+      else
+        summaries[id] = { 'type_dirs' => [dir.basename.to_s], 'file_path' => entry['file_path'].to_s }
+      end
+    end
+  end
+  summaries
+end
+
+parser_path   = Rails.root.join('app/services/domain/container/parser.rb')
+renderer_path = Rails.root.join('app/services/domain/container/renderer.rb')
+
+if parser_path.file? && renderer_path.file?
+  puts
+  puts '=== Section 4: G-1 wrapper fixtures — distinct child identifiers ==='
+
+  output_dir = ENV.fetch('WOODS_OUTPUT', Rails.root.join('tmp/woods').to_s)
+
+  # Extraction logs at info; silence it so the smoke output stays readable.
+  # Process-local: this runner exits when the script does.
+  Rails.logger.level = Logger::ERROR if Rails.logger.respond_to?(:level=)
+  require 'woods/extractor'
+
+  results << assert('full extraction completes') do
+    Woods::Extractor.new(output_dir: output_dir).extract_all
+  end
+
+  full = woods_smoke_index_summaries(output_dir)
+
+  results << assert('full extraction reports Domain::Container::Parser (not the wrapper)') do
+    summary = full['Domain::Container::Parser']
+    raise 'not in the index' if summary.nil?
+
+    raise "at #{summary['file_path']}" unless summary['file_path'].end_with?('/parser.rb')
+  end
+
+  results << assert('full extraction reports Domain::Container::Renderer (not the wrapper)') do
+    summary = full['Domain::Container::Renderer']
+    raise 'not in the index' if summary.nil?
+
+    raise "at #{summary['file_path']}" unless summary['file_path'].end_with?('/renderer.rb')
+  end
+
+  results << assert('both children are distinct units — dedup did not collapse them') do
+    parser_summary   = full['Domain::Container::Parser']
+    renderer_summary = full['Domain::Container::Renderer']
+    raise 'Parser missing' if parser_summary.nil?
+    raise 'Renderer missing' if renderer_summary.nil?
+
+    raise "both map to #{parser_summary['file_path']}" if parser_summary['file_path'] == renderer_summary['file_path']
+  end
+
+  results << assert('neither fixture file is indexed as the bare wrapper Domain::Container') do
+    summary = full['Domain::Container']
+    next if summary.nil?
+
+    file = summary['file_path']
+    raise "indexed as bare wrapper at #{file}" if file.end_with?('/parser.rb', '/renderer.rb')
+  end
+
+  # Incremental leg. The sibling's content is unchanged; the point is the
+  # dispatch — governed naming must survive re-extraction of one wrapper
+  # file and the publish that follows.
+  results << assert('incremental re-extract of parser.rb re-issues the governed child') do
+    File.utime(Time.now, Time.now, parser_path)
+    touched = Woods::Extractor.new(output_dir: output_dir)
+                              .extract_changed(['app/services/domain/container/parser.rb'])
+    raise "touched #{touched.inspect}" unless touched.include?('Domain::Container::Parser')
+  end
+
+  incremental = woods_smoke_index_summaries(output_dir)
+
+  results << assert('after incremental, Parser still a distinct child (no collapse)') do
+    summary = incremental['Domain::Container::Parser']
+    raise 'lost from the index' if summary.nil?
+
+    raise "at #{summary['file_path']}" unless summary['file_path'].end_with?('/parser.rb')
+  end
+
+  results << assert('after incremental, Renderer still a distinct child (no loss)') do
+    summary = incremental['Domain::Container::Renderer']
+    raise 'lost from the index' if summary.nil?
+
+    raise "at #{summary['file_path']}" unless summary['file_path'].end_with?('/renderer.rb')
+  end
+
+  results << assert('after incremental, neither fixture file is still the bare wrapper') do
+    summary = incremental['Domain::Container']
+    next if summary.nil?
+
+    file = summary['file_path']
+    raise "indexed as bare wrapper at #{file}" if file.end_with?('/parser.rb', '/renderer.rb')
+  end
+else
+  puts
+  puts '=== Section 4: G-1 wrapper fixtures — skipped (no Domain::Container fixtures in this variant) ==='
 end
 
 # ── Summary ──
