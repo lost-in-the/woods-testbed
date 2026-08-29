@@ -92,6 +92,30 @@ services:
     environment:
       <<: *common-env
 
+  # MySQL twin of rails-6.0: the only variant with a real mysql2 handle, so
+  # backend-dialect contracts (gem PR lost-in-the/woods#248) reach a live
+  # MySQL server through the production Console path. Rides the `backends`
+  # profile — it cannot boot without the mysql service.
+  rails-6.0-mysql:
+    build:
+      context: ./apps/rails-6.0-mysql
+    image: woods-testbed-rails-6.0-mysql
+    container_name: woods-testbed-rails-6.0-mysql
+    profiles: [backends]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "${RAILS_60_MYSQL_PORT:-3014}:3000"
+    volumes:
+      - ./apps/rails-6.0-mysql:/app
+      - ./scripts:/app/script/shared:ro
+      - ${WOODS_GEM_PATH:-../woods}:/woods-gem:ro
+      - bundle-rails-6-0-mysql:/bundle
+    environment:
+      <<: *common-env
+      MYSQL_HOST: mysql
+
   # ── Storage + embedding backends (opt-in) ────────────────────────────────
   #
   # Behind the `backends` profile so the default `docker compose up` stays fast:
@@ -145,6 +169,16 @@ services:
       timeout: 4s
       retries: 25
 
+  # Redis: cache/queue backend for exercising gem paths that assume one.
+  # Same opt-in profile as the storage backends above; app containers reach
+  # it over the compose network as `redis`, the host port is for smoke runs.
+  redis:
+    profiles: [backends]
+    image: redis:7-alpine
+    container_name: woods-testbed-redis
+    ports:
+      - "${REDIS_PORT:-56379}:6379"
+
 volumes:
   bundle-rails-8:
     name: woods-testbed-bundle-rails-8
@@ -154,3 +188,5 @@ volumes:
     name: woods-testbed-bundle-rails-6-0
   bundle-rails-8-large:
     name: woods-testbed-bundle-rails-8-large
+  bundle-rails-6-0-mysql:
+    name: woods-testbed-bundle-rails-6-0-mysql

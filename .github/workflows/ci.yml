@@ -39,8 +39,11 @@ jobs:
 
       - name: Ruby scripts parse
         run: |
-          for f in scripts/*.rb; do ruby -c "$f" >/dev/null; done
+          for f in scripts/*.rb scripts/support/*.rb scripts/tools/*.rb; do ruby -c "$f" >/dev/null; done
           echo "all scripts parse"
+
+      - name: MCP executable exchange helper self-tests
+        run: ruby scripts/tools/mcp_executable_exchange_self_test.rb
 
       # The gem is checked out here too — cheap, no build — so the contract's
       # type keys can be validated against IndexReader::TYPE_DIRS rather than
@@ -80,6 +83,7 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.ccr.yml config --quiet
+          ruby scripts/tools/readme_compose_consistency_check.rb
           echo "compose OK"
 
   # Boot each variant for real and run a full extraction against it. This is the
@@ -235,3 +239,69 @@ jobs:
           path: woods-testbed/apps/${{ matrix.variant }}/tmp/woods
           retention-days: 14
           if-no-files-found: warn
+
+  # The MySQL dialect lock-clause contract (gem PR lost-in-the/woods#248)
+  # needs a real mysql2 handle: no SQLite variant can prove the packaged
+  # Console refuses — or, today, executes — a locked SELECT on a live MySQL
+  # server, so an adapter-wiring regression would slip past the variants job.
+  # This lane starts the mysql service and the rails-6.0-mysql twin, then runs
+  # the production-path probe through the real EmbeddedExecutor.
+  #
+  # CONTRACT-FIRST: this job is RED until gem PR lost-in-the/woods#248 merges
+  # — the probe asserts a typed pre-execution refusal the current gem does not
+  # give. The red is the gate, not a fault.
+  woods-testbed-mysql:
+    name: MySQL console dialect lane
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the testbed
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          path: woods-testbed
+
+      - name: Check out the woods gem as a sibling
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: lost-in-the/woods
+          path: woods
+
+      - name: Start MySQL and the mysql2 variant
+        working-directory: woods-testbed
+        run: docker compose --profile backends up -d --build mysql rails-6.0-mysql
+
+      # The app CMD runs `bundle install && bin/rails db:prepare && rails
+      # server`, so "Listening on" implies migrations are in — mysql's own
+      # healthcheck (compose depends_on condition) gates the app start.
+      - name: Wait for boot
+        working-directory: woods-testbed
+        run: |
+          container="woods-testbed-rails-6.0-mysql"
+          for i in $(seq 1 240); do
+            if docker logs "$container" 2>&1 | grep -q "Listening on"; then
+              echo "booted after ~$((i * 5))s"; exit 0
+            fi
+            if docker logs "$container" 2>&1 | grep -qE "Bundler::|Could not find|LoadError|Your Ruby version|aborted!|Gemfile specified|Could not locate Gemfile"; then
+              echo "::error::boot failed — see the container log below"
+              docker logs "$container" 2>&1 | tail -40
+              exit 1
+            fi
+            [ $((i % 12)) -eq 0 ] && echo "  still booting (~$((i * 5))s): $(docker logs "$container" 2>&1 | tail -1)"
+            sleep 5
+          done
+          echo "::error::timed out waiting for boot after 20 minutes"
+          docker logs "$container" 2>&1 | tail -60
+          exit 1
+
+      # Explicit, matching the variants job: db:prepare is idempotent and
+      # covers a compose run where the data volume predates the schema.
+      - name: Prepare the database
+        working-directory: woods-testbed
+        run: |
+          docker exec woods-testbed-rails-6.0-mysql \
+            bash -lc 'cd /app && bin/rails db:prepare'
+
+      - name: Run the production-path MySQL console probe
+        working-directory: woods-testbed
+        run: |
+          docker exec woods-testbed-rails-6.0-mysql \
+            bash -lc 'cd /app && bin/rails runner script/shared/woods_mysql_console_smoke.rb'

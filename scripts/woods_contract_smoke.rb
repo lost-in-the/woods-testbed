@@ -306,6 +306,98 @@ Array(contract['policies']).each do |policy|
                         'method names still match the extractor pattern')
 end
 
+# ── Sql guardrails against the real gem classes ──────────────────────────
+# Contract-first, like the encoding smoke: these assert console-SQL behaviour
+# the gem's remediation PR is adding, so expect FAILs with a precise list
+# until the fix lands. Unit level by design — this script never opens a
+# database connection, so lock-mode rejections are asserted against
+# SqlValidator and redaction refusals against the executor's select
+# expression validator, backed by a registry ModelValidator (the same shape
+# the gem's own executor specs use).
+begin
+  require 'woods/console/embedded_executor'
+  require 'woods/console/model_validator'
+  require 'woods/console/safe_context'
+  require 'woods/console/sql_validator'
+
+  sql_validator = Woods::Console::SqlValidator.new
+
+  # Locking clauses read rows under shared/exclusive locks: reads in the
+  # English sense, but they take database locks that SafeContext's rollback
+  # does not release early, so one console query can stall the app's writes.
+  [
+    'SELECT * FROM users FOR UPDATE',
+    'SELECT * FROM users FOR NO KEY UPDATE',
+    'SELECT * FROM users FOR SHARE',
+    'SELECT * FROM users FOR UPDATE NOWAIT',
+    'SELECT * FROM users LOCK IN SHARE MODE'
+  ].each do |sql|
+    checks += 1
+    violation(violations, "sql guardrail: #{sql} was accepted") if sql_validator.valid?(sql)
+  end
+
+  # MySQL dialect bypass (gem PR lost-in-the/woods#248): `#` opens a line
+  # comment in MySQL, so the lock clause hides mid-statement from a scanner
+  # that anchors LOCK to statement-leader positions and strips only `--` and
+  # `/* */` comments. Contract-first: accepted until the dual-dialect lock
+  # check lands.
+  checks += 1
+  mysql_lock = "SELECT * FROM users LOCK # mysql comment\nIN SHARE MODE"
+  violation(violations, "sql guardrail (mysql # comment): #{mysql_lock.inspect} was accepted") if sql_validator.valid?(mysql_lock)
+
+  # A data-modifying CTE hidden as the *second* CTE. The writable-CTE scan
+  # must see past a benign first CTE; RETURNING makes the write explicit.
+  checks += 1
+  data_cte = 'WITH a AS (SELECT 1), b AS (DELETE FROM users RETURNING *) SELECT * FROM b'
+  violation(violations, "sql guardrail: #{data_cte} was accepted") if sql_validator.valid?(data_cte)
+
+  # The benign shape of the same statement must survive the same scan.
+  checks += 1
+  benign_cte = 'WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM b'
+  unless sql_validator.valid?(benign_cte)
+    violation(violations, "sql guardrail: benign multi-CTE SELECT was rejected: #{benign_cte}")
+  end
+
+  # Redaction oracle guard, unit level. Aliasing a redacted column renames it
+  # in the result set, so the redactor's column-name match misses it and the
+  # plaintext escapes through select — the same oracle the redacted-column
+  # refusals below exist to close.
+  safe_context = Woods::Console::SafeContext.new(connection: nil, redacted_columns: %w[email])
+  executor = Woods::Console::EmbeddedExecutor.new(
+    model_validator: Woods::Console::ModelValidator.new(registry: { 'User' => %w[id email name] }),
+    safe_context: safe_context
+  )
+
+  ['email AS contact', 'count(email) AS n'].each do |expr|
+    checks += 1
+    begin
+      executor.send(:validated_select, [expr], 'User')
+      violation(violations, "redaction guard: select expression #{expr.inspect} over redacted column 'email' was accepted")
+    rescue Woods::Console::ValidationError => e
+      unless e.message.match?(/redacted/i)
+        violation(violations, "redaction guard: #{expr.inspect} refused for the wrong reason: #{e.message}")
+      end
+    end
+  end
+
+  # The unaliased form stays allowed — SafeContext#redact still owns masking.
+  checks += 1
+  begin
+    kept = executor.send(:validated_select, ['email'], 'User')
+    violation(violations, "redaction guard: unaliased redacted column was refused: #{kept.inspect}") unless kept == ['email']
+  rescue Woods::Console::ValidationError => e
+    violation(violations, "redaction guard: unaliased redacted column was refused: #{e.message}")
+  end
+
+  checks += 1
+  masked = safe_context.redact('name' => 'Example User', 'email' => 'user@example.test')
+  violation(violations, "redaction guard: redact left redacted 'email' unmasked") unless masked['email'] == '[REDACTED]'
+  violation(violations, "redaction guard: redact masked non-redacted 'name'") if masked['name'] != 'Example User'
+rescue LoadError, NameError => e
+  checks += 1
+  violation(violations, "sql guardrails: woods console classes not loadable (#{e.class}: #{e.message})")
+end
+
 # ── Partition off known gem issues ────────────────────────────────────────
 # A violation matching a known_gem_issues entry is real but not the kernel's
 # fault. Reporting it separately keeps the gate meaningful — it can go green on
