@@ -138,6 +138,43 @@ def orphaned_flow_documents(output_dir)
   flow_documents(output_dir) - referenced
 end
 
+# The COMPLETE flow document set as { relative_path => parsed content } —
+# the full-vs-incremental equivalence oracle's second half. flow_index.json
+# itself is not a flow document. Two kinds of assembly-run nondeterminism
+# are normalized, and nothing else:
+#
+#   1. the top-level `generated_at` FIELD (FlowDocument#initialize defaults
+#      it to Time.now.iso8601, so every assembly run rewrites it);
+#   2. Proc#inspect OBJECT IDS embedded inside steps' operation method
+#      strings: anonymous callbacks (e.g. importmap-rails' before_action
+#      proc) serialize as "#<Proc:0x<address> ...source...>", and the
+#      address differs per process — the delta assembles in a fresh boot,
+#      the full run in this runner, so the same flow legitimately carries
+#      different hex. The object id is stripped and the source location
+#      kept; the operation is otherwise compared verbatim.
+def flow_document_map(output_dir)
+  Dir[flows_dir(output_dir).join('*.json')]
+    .reject { |file| File.basename(file) == 'flow_index.json' }
+    .each_with_object({}) do |file, map|
+      content = JSON.parse(File.read(file))
+      content.delete('generated_at')
+      map["flows/#{File.basename(file)}"] = normalize_run_nondeterminism(content)
+    end
+end
+
+# Proc object addresses are the only per-process value inside the documents
+# (verified by diffing an incremental run's document against a full run's).
+PROC_OBJECT_ID = /#<Proc:0x[0-9a-f]+/.freeze
+
+def normalize_run_nondeterminism(value)
+  case value
+  when String then value.gsub(PROC_OBJECT_ID, '#<Proc:0xSTRIPPED')
+  when Hash   then value.transform_values { |v| normalize_run_nondeterminism(v) }
+  when Array  then value.map { |v| normalize_run_nondeterminism(v) }
+  else value
+  end
+end
+
 # One controller's slice of flow_index.json as { action => relative path } —
 # the same shape the unit's metadata.flow_paths annotation carries.
 def controller_flow_paths(index, identifier)
@@ -209,24 +246,42 @@ end
 # One fresh-boot incremental for a single changed path: the documented CI
 # invocation (`CHANGED_FILES` + `woods:incremental`), so the delta runs in
 # a boot whose autoloaded constants reflect the edited file.
+#
+# The transient initializer never clobbers or deletes a file it did not
+# write. A pre-existing file of that name is reused only when its bytes are
+# EXACTLY what this smoke writes (provably this smoke's own leftover from
+# an interrupted run — reused and removed afterwards); anything else fails
+# closed with a clear error and the file is left untouched. Removal is
+# guarded the same way: only byte-identical content is ever deleted.
 LEG_INITIALIZER = 'config/initializers/zzz_woods_flows_smoke_precompute.rb'
+LEG_INITIALIZER_CONTENT = <<~RUBY
+  # frozen_string_literal: true
+
+  # Transient: written by script/shared/woods_flows_smoke.rb so its
+  # `woods:incremental` leg boots with flow precomputation enabled
+  # (the knob has no env override). Deleted by the smoke's ensure.
+  Woods.configure { |c| c.precompute_flows = true }
+RUBY
+
+def leg_initializer_path
+  Rails.root.join(LEG_INITIALIZER)
+end
 
 def write_leg_initializer
-  return if Rails.root.join(LEG_INITIALIZER).file?
+  path = leg_initializer_path
+  return if path.file? && path.read == LEG_INITIALIZER_CONTENT
 
-  File.write(Rails.root.join(LEG_INITIALIZER), <<~RUBY)
-    # frozen_string_literal: true
+  if path.file?
+    raise "refusing to run the incremental legs: #{LEG_INITIALIZER} already exists and is not this " \
+          "smoke's transient initializer — remove it and rerun (the file was left untouched)"
+  end
 
-    # Transient: written by script/shared/woods_flows_smoke.rb so its
-    # `woods:incremental` leg boots with flow precomputation enabled
-    # (the knob has no env override). Deleted by the smoke's ensure.
-    Woods.configure { |c| c.precompute_flows = true }
-  RUBY
+  File.write(path, LEG_INITIALIZER_CONTENT)
 end
 
 def remove_leg_initializer
-  path = Rails.root.join(LEG_INITIALIZER)
-  File.delete(path) if path.file?
+  path = leg_initializer_path
+  File.delete(path) if path.file? && path.read == LEG_INITIALIZER_CONTENT
 end
 
 def run_incremental_leg(output_dir, relative_path)
@@ -291,6 +346,7 @@ end
 # unexpected raise still prints a FAIL line and the summary. The fixture
 # file is restored on the way out either way.
 post_incremental_index = nil
+post_incremental_documents = nil
 
 begin
   # Baselines Sections 2 and 3 compare against.
@@ -335,8 +391,13 @@ begin
     puts "=== Section 2: incremental legs on #{chosen_relative} (#{chosen_entries.size} flow entries) ==="
 
     original_content = File.read(chosen_path)
-    write_leg_initializer
     begin
+      # Created inside the ensure-guarded region: any exception between
+      # creating the transient initializer and using it (or anywhere in the
+      # legs) removes it on the way out, so a partial run never leaves it
+      # behind.
+      write_leg_initializer
+
       # Leg A: add the probe action, incremental, expect it mapped end to
       # end.
       insert_probe_action(chosen_path)
@@ -439,6 +500,10 @@ begin
       end
 
       post_incremental_index = flow_index(output_dir)
+      # The reviewer-requested equivalence oracle's input: EVERY parsed flow
+      # document after the restored leg, compared against the final full
+      # extraction's documents in Section 3.
+      post_incremental_documents = flow_document_map(output_dir)
     ensure
       File.write(chosen_path, original_content) if File.read(chosen_path) != original_content
       remove_leg_initializer
@@ -475,6 +540,24 @@ begin
       unreferenced = on_disk - referenced
       missing      = referenced - on_disk
       raise "unreferenced: #{unreferenced.inspect}; missing: #{missing.inspect}" unless unreferenced.empty? && missing.empty?
+    end
+
+    full_documents = flow_document_map(output_dir)
+
+    results << assert('complete flow document set after the removal equals the full extraction\'s (no missing, no extra)') do
+      raise 'restored leg never produced a document snapshot' if post_incremental_documents.nil?
+
+      missing = full_documents.keys - post_incremental_documents.keys
+      extra   = post_incremental_documents.keys - full_documents.keys
+      raise "missing from the incremental set: #{missing.inspect}; extra: #{extra.inspect}" unless missing.empty? && extra.empty?
+    end
+
+    results << assert("every flow document's content is identical between the incremental and full runs " \
+                      '(modulo generated_at and Proc#inspect object ids — see flow_document_map)') do
+      raise 'restored leg never produced a document snapshot' if post_incremental_documents.nil?
+
+      drifted = full_documents.reject { |path, content| post_incremental_documents[path] == content }
+      raise "content drift in #{drifted.keys.inspect}" unless drifted.empty?
     end
 
     results << assert("controllers annotation for #{chosen_identifier} matches the baseline") do
