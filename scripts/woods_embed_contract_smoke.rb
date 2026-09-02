@@ -57,6 +57,10 @@ QDRANT_URL = ENV.fetch('PROBE_QDRANT_URL', 'http://qdrant:6333')
 OLLAMA_MODEL = ENV.fetch('PROBE_OLLAMA_MODEL', 'nomic-embed-text')
 INDEX_DIR = Pathname.new(ENV.fetch('WOODS_OUTPUT', Rails.root.join('tmp/woods').to_s))
 
+# The fake provider's width. Small, and deliberately not any real model's, so
+# a mismatch against a live collection is unambiguous.
+FAKE_DIMS = 256
+
 results = []
 
 def assert(name)
@@ -107,11 +111,16 @@ ensure
   Woods.configuration = previous
 end
 
+# Returns the indexer and the provider only. It deliberately does NOT return a
+# vector store: `build_vector_store` is not memoized, so any store built here
+# is a *different* object from the one `build_embed_indexer` wired into the
+# indexer, and asserting on it would prove nothing about the run. Where the
+# store must be verified, verify it out of band — the Qdrant cases below read
+# `points_count` over HTTP, which is the real thing.
 def indexer_for(cfg)
   with_config(cfg) do
     builder = Woods::Builder.new(cfg)
-    provider = builder.build_embedding_provider
-    [Woods::Tasks.build_embed_indexer, builder.build_vector_store(dimensions: provider.dimensions), provider]
+    [Woods::Tasks.build_embed_indexer, builder.build_embedding_provider]
   end
 end
 
@@ -130,10 +139,13 @@ rescue StandardError
   nil
 end
 
+OLLAMA_UP = reachable?(OLLAMA_URL, '/api/tags')
+QDRANT_UP = reachable?(QDRANT_URL, '/collections')
+
 puts "=== environment ==="
 puts "index:  #{INDEX_DIR}"
-puts "ollama: #{OLLAMA_URL} (#{reachable?(OLLAMA_URL, '/api/tags') ? 'up' : 'absent'})"
-puts "qdrant: #{QDRANT_URL} (#{reachable?(QDRANT_URL, '/collections') ? 'up' : 'absent'})"
+puts "ollama: #{OLLAMA_URL} (#{OLLAMA_UP ? 'up' : 'absent'})"
+puts "qdrant: #{QDRANT_URL} (#{QDRANT_UP ? 'up' : 'absent'})"
 puts
 
 unless File.exist?(File.join(Woods::Generation.new(output_dir: INDEX_DIR).payload_dir.to_s, 'manifest.json'))
@@ -145,30 +157,30 @@ end
 puts '=== 1. :fake provider (no network) ==='
 fake_chunks = nil
 results << assert(':fake is a selectable provider and embeds the index') do
-  indexer, store, provider = indexer_for(config_for(provider: :fake, options: { dimensions: 256 }))
-  raise "wrong width: #{provider.dimensions}" unless provider.dimensions == 256
+  indexer, provider = indexer_for(config_for(provider: :fake, options: { dimensions: FAKE_DIMS }))
+  raise "wrong width: #{provider.dimensions}" unless provider.dimensions == FAKE_DIMS
 
+  # The in-memory store this case runs against lives inside the indexer and is
+  # not reachable from here, so the run is verified by its reported stats. The
+  # durable-store assertion belongs to the Qdrant case, where the store can be
+  # read back independently.
   stats = indexer.index_all
   fake_chunks = stats[:processed]
   raise "nothing embedded: #{stats.inspect}" unless fake_chunks.to_i.positive?
   raise "errors reported: #{stats.inspect}" unless stats[:errors].to_i.zero?
-  raise 'store is empty after a successful run' if store.respond_to?(:size) && store.size.to_i.zero?
 
-  puts "        processed #{fake_chunks} chunks at 256 dims"
+  puts "        processed #{fake_chunks} chunks at #{provider.dimensions} dims"
 end
 
 # ── 2. :ollama — real embeddings when an endpoint answers ────────────────
 puts
 puts '=== 2. :ollama provider (real embeddings) ==='
-if reachable?(OLLAMA_URL, '/api/tags')
+if OLLAMA_UP && QDRANT_UP
   collection = "woods_contract_#{SecureRandom.hex(4)}"
   ollama_chunks = nil
+  ollama_dims = nil
   results << assert(":ollama embeds the index into a live Qdrant collection") do
-    unless reachable?(QDRANT_URL, '/collections')
-      raise 'qdrant absent — cannot store real vectors durably'
-    end
-
-    indexer, _store, provider = indexer_for(
+    indexer, provider = indexer_for(
       config_for(provider: :ollama,
                  options: { host: OLLAMA_URL, model: OLLAMA_MODEL },
                  vector_store: :qdrant,
@@ -176,6 +188,7 @@ if reachable?(OLLAMA_URL, '/api/tags')
     )
     stats = indexer.index_all
     ollama_chunks = stats[:processed]
+    ollama_dims = provider.dimensions
     raise "errors reported: #{stats.inspect}" unless stats[:errors].to_i.zero?
 
     stored = qdrant_points(collection)
@@ -205,7 +218,7 @@ if reachable?(OLLAMA_URL, '/api/tags')
     raise 'no populated collection to guard' unless before.to_i.positive?
 
     refused = begin
-      indexer_for(config_for(provider: :fake, options: { dimensions: 256 },
+      indexer_for(config_for(provider: :fake, options: { dimensions: FAKE_DIMS },
                              vector_store: :qdrant,
                              store_options: { url: QDRANT_URL, collection: collection }))
       nil
@@ -223,7 +236,13 @@ if reachable?(OLLAMA_URL, '/api/tags')
     unless refused.message.match?(/dimension/i)
       raise "refusal does not name the dimensions: #{refused.class}: #{refused.message}"
     end
-    [768, 256].each do |width|
+    # The widths come from the run, not from a literal: PROBE_OLLAMA_MODEL is
+    # overridable, and a model of another width (bge-m3 is 1024, not
+    # nomic-embed-text's 768) would fail a hardcoded assertion on a run where
+    # the contract actually held.
+    raise 'the :ollama case did not report a width to compare against' if ollama_dims.nil?
+
+    [ollama_dims, FAKE_DIMS].each do |width|
       next if refused.message.include?(width.to_s)
 
       raise "refusal does not name width #{width}: #{refused.message}"
@@ -237,8 +256,13 @@ if reachable?(OLLAMA_URL, '/api/tags')
 
   delete_collection(collection)
 else
-  skip(':ollama provider', "nothing answering at #{OLLAMA_URL}")
-  skip('dimension guard', 'depends on the ollama case having populated a collection')
+  missing = []
+  missing << "ollama at #{OLLAMA_URL}" unless OLLAMA_UP
+  missing << "qdrant at #{QDRANT_URL}" unless QDRANT_UP
+  why = "needs #{missing.join(' and ')}"
+  skip(':ollama provider', why)
+  skip('provider-calibrated chunking', 'needs both providers to have run')
+  skip('dimension guard', why)
 end
 
 puts
