@@ -25,7 +25,7 @@ jobs:
     name: Lint scripts, contract, compose
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
@@ -51,7 +51,7 @@ jobs:
       # name, and a singular key silently reports 0 forever; this repo has
       # already had that bug once.
       - name: Check out the woods gem (for TYPE_DIRS)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: lost-in-the/woods
           path: .gem-ref
@@ -101,7 +101,7 @@ jobs:
         variant: [rails-8.0-large, rails-8.0, rails-7.2, rails-6.0]
     steps:
       - name: Check out the testbed
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: woods-testbed
 
@@ -109,7 +109,7 @@ jobs:
       # sibling-repo layout has to be reproduced here. Both repos are public, so
       # the default token is enough — no PAT secret required.
       - name: Check out the woods gem as a sibling
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: lost-in-the/woods
           path: woods
@@ -286,12 +286,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the testbed
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: woods-testbed
 
       - name: Check out the woods gem as a sibling
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: lost-in-the/woods
           path: woods
