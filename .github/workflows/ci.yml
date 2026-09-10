@@ -8,6 +8,12 @@ on:
     branches: ['**']
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      woods_ref:
+        description: 'woods ref to exercise (branch, tag, or SHA); main when empty'
+        required: false
+        default: main
 
 # Least-privilege: CI only reads this checkout and the public gem repo.
 permissions:
@@ -54,6 +60,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: lost-in-the/woods
+          ref: ${{ inputs.woods_ref || 'main' }}
           path: .gem-ref
 
       - name: Kernel contract matches the gem's type directories
@@ -112,6 +119,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: lost-in-the/woods
+          ref: ${{ inputs.woods_ref || 'main' }}
           path: woods
 
       - name: Build the variant image
@@ -294,6 +302,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: lost-in-the/woods
+          ref: ${{ inputs.woods_ref || 'main' }}
           path: woods
 
       - name: Start MySQL and the mysql2 variant
