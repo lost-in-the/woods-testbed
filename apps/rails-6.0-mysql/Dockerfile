@@ -7,9 +7,10 @@ ENV LANG=C.UTF-8 \
     BUNDLE_WITHOUT="production" \
     PATH=/bundle/bin:/app/bin:$PATH
 
-# Debian bullseye (the Ruby 3.0 image base) is end of life and its security
-# suite's Release file has expired; apt refuses it unless told otherwise.
-RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99expired-release
+# Debian bullseye (the Ruby 3.0 image base) is end of life: its security suite
+# publishes nothing new and its Release file has expired, so apt refuses the
+# whole update. Drop that one source and keep apt's validity checks intact.
+RUN sed -i '/debian-security/d' /etc/apt/sources.list
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
       build-essential \
       git \
