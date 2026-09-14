@@ -28,10 +28,12 @@ job, a mailer; no asset pipeline or JS bundler) so the Rails 6.0 boot stays smal
 It's validated via Docker/CI rather than the host, since Ruby 3.0 / Rails 6.0
 aren't installed on most dev machines.
 
-The **rails-8.0-large** variant is a large synthetic app for scale
-benchmarks (incremental latency, whole-app re-run cost, daemon memory). It
-exists to measure scale, not version behaviour. Its `Dockerfile` runs
-`db:prepare` at boot, as does the MySQL contract variant.
+The **rails-8.0-large** variant is [Canopy](apps/rails-8.0-large/README.md), a
+working publishing testbed with editorial review, subscriptions, billing,
+newsletters, and support across 29 domain tables. Deterministic smoke/demo/stress
+datasets exercise Console queries; an optional source generator independently
+scales extraction benchmarks. Its `Dockerfile` runs `db:prepare` at boot, as does
+the MySQL contract variant. Open http://localhost:3013 and choose a demo editor.
 
 The **rails-6.0-mysql** variant is the Rails 6.0 floor app wired to `mysql2`
 instead of SQLite. It rides the `backends` Compose profile with the shared
@@ -100,7 +102,7 @@ woods-testbed/
 │   ├── rails-8.0/        Rails 8 variant (tutorial sample app)
 │   ├── rails-7.2/        Rails 7.2 variant
 │   ├── rails-6.0/        Rails 6.0 variant (supported floor, minimal)
-│   ├── rails-8.0-large/  Rails 8 scale variant (synthetic, benchmarks)
+│   ├── rails-8.0-large/  Rails 8 Canopy app + optional scale generator
 │   └── rails-6.0-mysql/  Rails 6.0 + mysql2 dialect variant
 ├── bin/                  Host-side tooling: runs on your machine, not in a container
 │   ├── bootstrap_docker.sh              # start the Docker daemon if it isn't running

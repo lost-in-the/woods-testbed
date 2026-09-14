@@ -10,7 +10,7 @@
 # metadata and source, so the downstream fan-out is real.
 {
   name: 'model',
-  description: 'add a scope to Article (a kernel model with a concern and 3 associations)',
+  description: 'add a scope to Article (a connected editorial model with an inlined concern)',
   path: 'app/models/article.rb',
   apply: lambda { |source|
     source.sub(

@@ -1,0 +1,4 @@
+<h1><%= @collection.name %></h1><p><%= @collection.publication.name %></p>
+<table><thead><tr><th>Position</th><th>Story</th><th>Status</th><th>Tags</th></tr></thead><tbody><% @placements.each do |placement| %><tr><td><%= placement.position %></td><td><%= link_to placement.article.title, article_path(placement.article) %></td><td><%= placement.article.state %></td><td><%= placement.article.tags.pluck(:name).join(', ') %></td></tr><% end %></tbody></table>
+<%= render 'shared/pagination', size: @placements.size %>
+<h2>Add or reorder a story</h2><%= form_with url: collection_path(@collection), method: :patch do |f| %><%= f.label :article_id, 'Story' %><%= f.select :article_id, @articles.map { |a| [a.title, a.id] } %><%= f.label :position %><%= f.number_field :position, value: 0, min: 0, required: true %><%= f.label :tag, 'Add tag (optional)' %><%= f.text_field :tag %> <%= f.submit 'Save placement' %><% end %>

@@ -101,6 +101,8 @@ jobs:
   # others, which is the whole point of having a version matrix.
   variants:
     name: ${{ matrix.variant }}
+    env:
+      TESTBED_DATA_PROFILE: smoke
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -175,6 +177,16 @@ jobs:
         run: |
           docker exec "woods-testbed-${{ matrix.variant }}" \
             bash -lc 'cd /app && bin/rails db:prepare'
+
+      - name: Canopy application tests and deterministic seeds
+        if: matrix.variant == 'rails-8.0-large'
+        working-directory: woods-testbed
+        run: |
+          docker compose exec -T -e TESTBED_DATA_PROFILE=smoke rails-8.0-large bin/rails testbed:seed
+          docker compose exec -T -e RAILS_ENV=test rails-8.0-large bin/rails db:prepare
+          docker compose exec -T rails-8.0-large bundle exec rspec
+          docker compose exec -T rails-8.0-large bin/rails runner script/shared/tools/canopy_dataset_check.rb
+          docker compose exec -T rails-8.0-large bin/rails runner script/shared/tools/canopy_incremental_check.rb
 
       # woods:clean first, deliberately: a full extraction overwrites unit files
       # but does not prune orphans, so a reused output directory over-reports

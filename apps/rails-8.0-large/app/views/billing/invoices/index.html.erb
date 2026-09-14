@@ -1,6 +1,1 @@
-<h1><%= t("billing.invoices.index.title") %></h1>
-<ul>
-  <% @invoices.each do |invoice| %>
-    <li><%= link_to invoice.reference, billing_invoice_path(invoice) %></li>
-  <% end %>
-</ul>
+<h1>Invoices</h1><table><thead><tr><th>Reference</th><th>Subscriber</th><th>Total</th><th>State</th><th>Due</th></tr></thead><tbody><% @invoices.each do |invoice| %><tr><td><%= link_to invoice.reference, billing_invoice_path(invoice) %></td><td><%= invoice.subscriber.name %></td><td>$<%= '%.2f' % (invoice.total_cents / 100.0) %></td><td><%= invoice.settled_at ? 'Paid' : 'Outstanding' %></td><td><%= invoice.due_at&.to_date %></td></tr><% end %></tbody></table><%= render 'shared/pagination', size: @invoices.size %>

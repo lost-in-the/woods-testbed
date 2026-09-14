@@ -1,0 +1,1 @@
+<h1>Support</h1><% @tickets.each do |ticket| %><section><%= link_to ticket.title, support_ticket_path(ticket) %> · <%= ticket.subscriber.name %> · <%= ticket.state %></section><% end %><%= render 'shared/pagination', size: @tickets.size %>

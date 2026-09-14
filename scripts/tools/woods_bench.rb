@@ -54,6 +54,8 @@
 
 require 'json'
 require 'benchmark'
+require 'open3'
+require 'woods/generation'
 
 APP        = Rails.root
 INDEX_DIR  = Pathname.new(ENV.fetch('WOODS_OUTPUT', APP.join('tmp/woods').to_s))
@@ -137,6 +139,10 @@ rescue StandardError
   nil
 end
 
+def current_manifest
+  read_json(Woods::Generation.new(output_dir: INDEX_DIR).payload_dir.join('manifest.json')) || {}
+end
+
 def percentile(sorted, fraction)
   return nil if sorted.empty?
 
@@ -186,8 +192,9 @@ def incremental_cycle(spec)
   raise "change script #{spec[:file]} did not modify #{spec[:path]} — its anchor has drifted" if mutated == original
 
   path.write(mutated)
+  Rails.application.reloader.reload!
 
-  before = read_json(INDEX_DIR.join('manifest.json'))&.fetch('total_units', nil)
+  before = current_manifest&.fetch('total_units', nil)
 
   extractor = Woods::Extractor.new(output_dir: INDEX_DIR)
   started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -199,11 +206,15 @@ def incremental_cycle(spec)
   # Hash silently reports 0 units written for every scenario, which is precisely
   # the number finding 16 needs.
   touched = Array(results).size
-  after = read_json(INDEX_DIR.join('manifest.json'))&.fetch('total_units', nil)
+  after = current_manifest&.fetch('total_units', nil)
 
   { ms: elapsed, units_written: touched, index_before: before, index_after: after, rss_mb: rss_mb }
 ensure
-  path.write(original) if original
+  if original
+    path.write(original)
+    Rails.application.reloader.reload!
+    Woods::Extractor.new(output_dir: INDEX_DIR).extract_changed([path.to_s])
+  end
 end
 
 # ── Run ───────────────────────────────────────────────────────────────────
@@ -227,7 +238,7 @@ print 'cold full extraction... '
 cold = cold_full_extraction
 puts "#{cold[:wall_ms]} ms"
 
-manifest = read_json(INDEX_DIR.join('manifest.json')) || {}
+manifest = current_manifest || {}
 counts = manifest['counts'] || {}
 total_units = manifest['total_units'].to_i
 app_units = total_units - counts.fetch('rails_source', 0).to_i
@@ -263,7 +274,7 @@ payload = {
   'variant' => Rails.application.class.module_parent_name,
   'rails_version' => Rails.version,
   'ruby_version' => RUBY_VERSION,
-  'woods_gem_sha' => `git -C /woods-gem rev-parse --short HEAD 2>/dev/null`.strip.presence,
+  'woods_gem_sha' => Open3.capture2('git', '-c', 'safe.directory=/woods-gem', '-C', '/woods-gem', 'rev-parse', '--short', 'HEAD').first.strip.presence,
   'generated' => generated,
   'index' => {
     'total_units' => total_units,

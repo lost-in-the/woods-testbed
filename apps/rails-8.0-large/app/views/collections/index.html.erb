@@ -1,0 +1,4 @@
+<h1>Collections</h1><p>Organize stories into ordered reading lists.</p>
+<% @collections.each do |collection| %><section><%= link_to collection.name, collection_path(collection) %> · <%= collection.publication.name %></section><% end %>
+<%= render 'shared/pagination', size: @collections.size %>
+<h2>Create collection</h2><%= form_with url: collections_path do |f| %><%= f.label :name %><%= f.text_field :name, required: true %><%= f.label :publication_id, 'Publication' %><%= f.select :publication_id, current_organization.publications.map { |p| [p.name, p.id] } %> <%= f.submit 'Create collection' %><% end %>

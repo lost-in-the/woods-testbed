@@ -8,5 +8,5 @@
 # 401. Never copy that token, or this initializer, into a real app.
 Woods.configure do |config|
   config.console_mcp_enabled = true
-  config.console_redacted_columns = %w[password password_digest encrypted_password]
+  config.console_redacted_columns = %w[password password_digest encrypted_password secret]
 end

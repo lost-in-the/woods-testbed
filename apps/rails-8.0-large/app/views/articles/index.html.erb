@@ -1,6 +1,3 @@
-<h1><%= t("articles.index.title") %></h1>
-<ul>
-  <% @articles.each do |article| %>
-    <li><%= link_to article.title, article_path(article) %></li>
-  <% end %>
-</ul>
+<h1>Editorial</h1><p><%= @published_count %> published stories · <%= link_to 'Write a story', new_article_path %></p>
+<%= form_with url: articles_path, method: :get do |f| %><%= f.search_field :q, value: params[:q], placeholder: 'Search titles', aria: { label: 'Search titles' } %> <%= f.select :state, %w[draft in_review changes_requested approved scheduled published], include_blank: 'All states', selected: params[:state] %> <%= f.submit 'Filter' %><% end %>
+<table><thead><tr><th>Story</th><th>Publication</th><th>Author</th><th>Status</th></tr></thead><tbody><% @articles.each do |article| %><tr><td><%= link_to article.title, article_path(article) %></td><td><%= article.publication.name %></td><td><%= article.author.name %></td><td><span class="badge"><%= article.state.humanize %></span></td></tr><% end %></tbody></table><%= render 'shared/pagination', size: @articles.size %>

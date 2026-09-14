@@ -1,29 +1,13 @@
-# Pundit-shaped: index?/show?/create? match PUNDIT_ACTIONS, and the class
-# follows Pundit's user/record convention so PunditExtractor claims it.
 class ArticlePolicy < ApplicationPolicy
-  def index?
-    true
-  end
-
-  def show?
-    record.published_at.present? || own?
-  end
-
-  def create?
-    user.present?
-  end
-
-  def update?
-    own?
-  end
-
-  def destroy?
-    own?
-  end
-
+  def index? = user.present?
+  def show? = member? && (record.state == 'published' || update?)
+  def create? = member?
+  def update? = member? && (record.author_id == user.id || review?)
+  def destroy? = update?
+  def review? = user.present? && record.publication.present? && user.editor_of?(record.publication.organization)
+  def publish? = review?
   private
-
-  def own?
-    record.author_id == user&.id
+  def member?
+    user.present? && user.memberships.exists?(organization_id: record.publication&.organization_id)
   end
 end
