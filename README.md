@@ -279,3 +279,31 @@ after changing the env var: `docker compose down rails-8.0 && WOODS_GEM_PATH=...
 
 **Boot-time changes don't take effect.** Clear bootsnap cache inside
 the container: `docker compose exec rails-8.0 rm -rf tmp/cache/bootsnap`.
+
+### Extraction phase measurements
+
+The opt-in `scripts/tools/woods_bench.rb` enables `WOODS_PROFILE` during each
+measured extraction and records explicit phase durations, whole-run totals
+when available, and raw profile lines for cold full and incremental samples.
+Extraction wall time excludes Rails/process boot and mutation/reload setup.
+The parser subtracts nested payload sync from legacy `publish` measurements;
+newer disjoint profiles keep pointer publication and retention separate.
+Unaccounted time includes uninstrumented work and per-line rounding. Older
+gems without phase logging produce an empty phase map rather than guessed
+stages. Run `ruby scripts/tools/woods_phase_logger_self_test.rb` to check the
+parser without booting Rails.
+
+For an isolated payload-seed comparison, run the opt-in clone benchmark:
+
+```bash
+WOODS_CLONE_BASELINE=/path/to/baseline/woods \
+WOODS_CLONE_CANDIDATE=/path/to/candidate/woods \
+WOODS_CLONE_BENCH_DIR=/path/on/the/index/filesystem \
+  ruby scripts/tools/woods_payload_clone_bench.rb
+```
+
+It alternates both implementations over seven repetitions, verifies contents,
+file identities and replacement isolation, and removes its generated tree.
+Use `WOODS_CLONE_REPS` to change repetitions or `WOODS_CLONE_SOURCE` to clone an
+existing payload read-only. Choose the actual persistent filesystem; tmpfs can
+hide the cost. These are component timings, not whole-app performance claims.
