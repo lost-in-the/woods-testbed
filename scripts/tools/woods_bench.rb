@@ -16,8 +16,8 @@
 # written was small (woods-testbed#2):
 #
 #   1. Incremental latency at scale — p50/p95 for a one-file change against an
-#      app with thousands of units, where PageRank and the dependents pass
-#      dominate rather than boot time.
+#      app with thousands of units, where payload seeding and other fixed work
+#      can dominate a small change.
 #   2. Whole-app re-run cost (#165 review finding 16) — a routes change replaces
 #      every ROUTE_CONSUMER_EXTRACTORS type wholesale. The reviewer measured
 #      1,707 units / 24% of their index; on a fixture app the same change is a
@@ -65,65 +65,25 @@ CHANGE_DIR = APP.join('script/shared/tools/bench_changes')
 require 'woods'
 require 'woods/extractor'
 
-# ── Phase breakdown, without a gem change ─────────────────────────────────
-#
-# Extractor emits no ActiveSupport::Notifications events (there is no
-# instrumentation on the extraction path at all), so the phases cannot be
-# subscribed to. It *does* log a marker at the top of each one, so a logger that
-# stamps every line with a monotonic clock reading gives a real breakdown
-# derived from the run rather than guessed at.
-#
-# This is why "PageRank dominates" can stop being a hypothesis.
-class PhaseLogger < Logger
-  PHASES = {
-    /Deduplicating results/ => 'extract',
-    /Resolving dependents/ => 'dedupe',
-    /Analyzing dependency graph/ => 'dependents',
-    /Enriching with git data/ => 'graph_analysis',
-    /Normalizing file paths/ => 'git_enrich',
-    /Writing output/ => 'normalize'
-  }.freeze
+require_relative '../support/woods_phase_logger'
 
-  attr_reader :marks
-
-  def initialize
-    super($stdout)
-    self.level = Logger::INFO
-    @marks = []
-  end
-
-  def add(severity, message = nil, progname = nil)
-    text = message || progname
-    @marks << [now, text.to_s] if text.is_a?(String) && text.include?('[Woods]')
-    true
-  end
-
-  def now
-    Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  end
-
-  # Turn the marker stream into named durations. Each PHASES entry names the
-  # phase that *ended* when that marker was logged, which is what makes the
-  # arithmetic honest: the marker announces the next phase starting.
-  def phase_durations(started_at, finished_at)
-    out = {}
-    previous = started_at
-
-    @marks.each do |(at, text)|
-      label = PHASES.find { |pattern, _| pattern.match?(text) }&.last
-      next unless label
-
-      out[label] = ((at - previous) * 1000).round(1)
-      previous = at
-    end
-
-    # Everything after the "Writing output" marker: the per-unit JSON writes,
-    # the graph, the analysis, the manifest, the snapshot and the generation
-    # bump. Named for what it is — on a large tree this is dominated by
-    # AtomicFile's fsync per unit file, not by anything analytical.
-    out['write_and_publish'] = ((finished_at - previous) * 1000).round(1)
-    out
-  end
+# Extraction wall time excludes Rails boot and mutation/reload setup. Raw
+# profile lines retain the evidence behind the parsed, additive phase totals.
+def profile_extraction
+  logger = PhaseLogger.new
+  original_logger = Rails.logger
+  original_profile = ENV['WOODS_PROFILE']
+  Rails.logger = logger
+  ENV['WOODS_PROFILE'] = '1'
+  started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  result = yield
+  finished = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  [result, { wall_ms: ((finished - started) * 1000).round(1),
+             phases: logger.phase_durations(started, finished),
+             profile_total_ms: logger.profile_total_ms, profile_lines: logger.profile_lines }]
+ensure
+  Rails.logger = original_logger if original_logger
+  ENV['WOODS_PROFILE'] = original_profile
 end
 
 def rss_mb
@@ -162,24 +122,15 @@ def load_scenarios
 end
 
 # ── Cold full extraction ──────────────────────────────────────────────────
-# woods:clean first, deliberately. A full extraction overwrites unit files but
-# does not prune orphans, so extracting into a directory that has seen a
-# different tree over-reports every count (lost-in-the/woods#177) — which would
-# silently inflate the very numbers this script exists to produce.
+# Start without a prior payload so this measures a cold full extraction.
+# Repeat-full seeding needs its own scenario; do not infer it from this run.
 def cold_full_extraction
   FileUtils.rm_rf(INDEX_DIR)
 
-  logger = PhaseLogger.new
-  original = Rails.logger
-  Rails.logger = logger
-
-  started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  Woods::Extractor.new(output_dir: INDEX_DIR).extract_all
-  finished = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-  { wall_ms: ((finished - started) * 1000).round(1), phases: logger.phase_durations(started, finished) }
-ensure
-  Rails.logger = original if original
+  _result, measurement = profile_extraction do
+    Woods::Extractor.new(output_dir: INDEX_DIR).extract_all
+  end
+  measurement
 end
 
 # One incremental cycle over a real edit, applied and reverted so the tree ends
@@ -197,9 +148,7 @@ def incremental_cycle(spec)
   before = current_manifest&.fetch('total_units', nil)
 
   extractor = Woods::Extractor.new(output_dir: INDEX_DIR)
-  started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  results = extractor.extract_changed([path.to_s])
-  elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round(1)
+  results, measurement = profile_extraction { extractor.extract_changed([path.to_s]) }
 
   # extract_changed returns `touched.to_a` — a flat Array of unit identifiers,
   # NOT a Hash keyed by type the way extract_all's result is. Treating it as a
@@ -208,7 +157,9 @@ def incremental_cycle(spec)
   touched = Array(results).size
   after = current_manifest&.fetch('total_units', nil)
 
-  { ms: elapsed, units_written: touched, index_before: before, index_after: after, rss_mb: rss_mb }
+  { ms: measurement[:wall_ms], phases_ms: measurement[:phases],
+    profile_total_ms: measurement[:profile_total_ms], profile_lines: measurement[:profile_lines],
+    units_written: touched, index_before: before, index_after: after, rss_mb: rss_mb }
 ensure
   if original
     path.write(original)
@@ -263,7 +214,8 @@ results = scenarios.map do |spec|
     'max_ms' => times.last,
     'units_written_max' => written,
     'units_written_pct_of_index' => total_units.positive? ? ((written.to_f / total_units) * 100).round(1) : nil,
-    'rss_mb_after' => samples.last[:rss_mb]
+    'rss_mb_after' => samples.last[:rss_mb],
+    'samples' => samples
   }
   puts "p50 #{row['p50_ms']} ms  p95 #{row['p95_ms']} ms  wrote #{written} units (#{row['units_written_pct_of_index']}% of index)"
   row
@@ -282,13 +234,14 @@ payload = {
     'rails_source_units' => counts.fetch('rails_source', 0),
     'counts' => counts
   },
-  'cold_full_extraction' => { 'wall_ms' => cold[:wall_ms], 'phases_ms' => cold[:phases] },
+  'cold_full_extraction' => { 'wall_ms' => cold[:wall_ms], 'phases_ms' => cold[:phases],
+                              'profile_total_ms' => cold[:profile_total_ms], 'profile_lines' => cold[:profile_lines] },
   'incremental' => results,
   'rss_mb' => { 'before' => rss_start, 'after' => rss_mb },
   'caveats' => [
     "p95 of #{REPS} samples is indicative, not a real tail — raise WOODS_BENCH_REPS for a meaningful one",
-    'phase breakdown is derived from Extractor log markers, not instrumentation; the extraction path emits no ActiveSupport::Notifications events',
-    'single process, single container — not a multi-daemon or bind-mount-latency measurement'
+    'phase breakdown uses WOODS_PROFILE durations; legacy publish excludes nested sync but includes retention; unaccounted includes log rounding',
+    'extraction wall time excludes process/Rails boot and mutation/reload setup; single process, single container'
   ]
 }
 
