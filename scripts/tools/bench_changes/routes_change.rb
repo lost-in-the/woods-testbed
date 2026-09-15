@@ -16,9 +16,8 @@
   description: 'add a route (fans out to every ROUTE_CONSUMER type)',
   path: 'config/routes.rb',
   apply: lambda { |source|
-    source.sub(
-      "  root \"articles#index\"",
-      "  get \"bench_probe\", to: \"articles#index\"\n  root \"articles#index\""
-    )
+    source.sub(/^(\s*)root\s+.*$/) do |root_line|
+      "  get \"bench_probe\", to: \"articles#index\"\n#{root_line}"
+    end
   }
 }

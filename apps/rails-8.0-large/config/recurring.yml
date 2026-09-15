@@ -1,10 +1,8 @@
-# Solid Queue recurring tasks — one of the three schedule formats
-# ScheduledJobExtractor recognises (the others are config/sidekiq_cron.yml and
-# config/schedule.rb).
+# Extraction fixture; run bin/rails testbed:drain locally (no scheduler dependency).
 production:
-  archive_stale_articles:
-    class: PublishArticleJob
-    schedule: "0 0 * * *"
-  charge_outstanding_invoices:
-    class: Billing::ChargePaymentJob
+  publish_due_articles:
+    class: PublishDueArticlesJob
+    schedule: "*/5 * * * *"
+  renew_subscriptions:
+    class: RenewSubscriptionsJob
     schedule: "0 * * * *"

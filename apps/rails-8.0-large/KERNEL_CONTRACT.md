@@ -29,10 +29,10 @@ model".
 ## The domain
 
 A publishing platform with billing. Not arbitrary — it produces genuine
-cross-cutting edges. An article is published by a use case, which enqueues a
-job, which mails an author and issues an invoice against a payment. That is a
-chain across six unit types, which is what makes it a fan-out fixture rather
-than a directory listing.
+cross-cutting edges. Publishing reaches revision review, a use case, a mail job, and activity/webhook
+history. Subscription activation and renewal issue invoices with retryable
+payments. Authors and publications connect these workflows. See the app README
+for the working Canopy journeys and `functional_contract.yml` for their checks.
 
 ```
 Author ──< Article ──< Comment
@@ -90,9 +90,9 @@ mounts.
 
 ## The generated tree
 
-The generator (rung 9) multiplies the kernel. Everything it emits carries the
-`Gen` prefix and lives under `app/generated` / `db/generated`, so a generated
-unit can never collide with a kernel unit — the same trick the gem's #164
+The generator (rung 9) multiplies the kernel. It uses generated model families and `Gen` helper classes under
+`app/*/generated`, `db/generated`, and `config/routes_generated.rb`, keeping its
+files separate from handwritten kernel/domain files — the same trick the gem's #164
 differential harness uses to sidestep the known identifier-collision issue
 (B-062), where two units of different types sharing an identifier collapse onto
 one graph node.
@@ -104,9 +104,9 @@ docker exec woods-testbed-rails-8.0-large bash -lc \
   'cd /app && bin/rails woods:extract && bin/rails runner script/shared/woods_contract_smoke.rb'
 ```
 
-Exit `0` conformant, `1` no index, `2` violations listed. It **fails by design**
-until the kernel is built — the precise list of what's missing is the output,
-and it is the worklist for rungs 4–7.
+Exit `0` conformant, `1` no index, `2` violations listed. The kernel is implemented;
+the Canopy validation run passed all 64 assertions without a known-issue
+exclusion. Historical gem issue entries remain for checking older gem revisions.
 
 Variants without a `kernel_contract.yml` skip cleanly, since `scripts/` is
 mounted into all of them.

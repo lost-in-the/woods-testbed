@@ -13,4 +13,9 @@ class Author < ApplicationRecord
   def display_name
     name.presence || email
   end
+  has_many :memberships, dependent: :destroy
+  has_many :organizations, through: :memberships
+  def editor_of?(organization)
+    memberships.exists?(organization_id: organization.id, role: 'editor')
+  end
 end

@@ -1,12 +1,11 @@
 module Resolvers
   class ArticlesResolver < GraphQL::Schema::Resolver
     type [Types::ArticleType], null: false
-
-    argument :author_id, ID, required: false
-
-    def resolve(author_id: nil)
-      scope = Article.published.not_archived
-      author_id ? scope.where(author_id: author_id) : scope
+    def resolve
+      return [] unless context[:author] && context[:organization]
+      scope = Article.joins(:publication).where(publications: { organization_id: context[:organization].id })
+      scope = scope.where(author: context[:author]).or(scope.where(state: 'published')) unless context[:author].editor_of?(context[:organization])
+      scope.order(id: :desc).limit(25)
     end
   end
 end

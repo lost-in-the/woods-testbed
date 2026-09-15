@@ -12,9 +12,9 @@ version: 1
 
 domain: >-
   A publishing platform with billing. Chosen because it produces genuine
-  cross-cutting edges — an article is published by a use case, which enqueues a
-  job, which mails an author and issues an invoice — rather than a flat pile of
-  unrelated classes.
+  cross-cutting edges: reviewed articles publish through a use case and mail
+  job; subscriptions issue invoices and collect payments. Authors and
+  publications connect these working Canopy workflows.
 
 # ── Models ────────────────────────────────────────────────────────────────
 # The hub is Author: several models point at it, so PageRank has something to

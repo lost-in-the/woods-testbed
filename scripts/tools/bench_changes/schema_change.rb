@@ -12,17 +12,9 @@
 # rung 13's business.
 {
   name: 'schema',
-  description: 'add a column to db/schema.rb (boot-captured; ReloadPolicy says :restart)',
+  description: 'edit schema.rb without migrating the live database (invalidation probe)',
   path: 'db/schema.rb',
   apply: lambda { |source|
-    source.sub(
-      '    t.datetime "archived_at"' + "\n" + '    t.datetime "created_at", null: false' + "\n" +
-      '    t.datetime "updated_at", null: false' + "\n" +
-      '    t.index ["author_id"], name: "index_articles_on_author_id"',
-      '    t.datetime "archived_at"' + "\n" + '    t.string "bench_probe"' + "\n" +
-      '    t.datetime "created_at", null: false' + "\n" +
-      '    t.datetime "updated_at", null: false' + "\n" +
-      '    t.index ["author_id"], name: "index_articles_on_author_id"'
-    )
+    source.sub(/(create_table "articles"[^\n]*\n)/, '\\1    t.string "bench_probe"' + "\n")
   }
 }

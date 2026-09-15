@@ -7,6 +7,7 @@ module Billing
 
     self.table_name = "billing_payments"
 
+    has_many :refunds, class_name: 'Billing::Refund', dependent: :restrict_with_error
     belongs_to :invoice, class_name: "Billing::Invoice"
 
     validates :amount_cents, numericality: { greater_than: 0 }

@@ -1,0 +1,1 @@
+<%= form_with model: @article do |f| %><% unless @article.persisted? %><%= f.label :publication_id %><%= f.collection_select :publication_id, current_organization.publications, :id, :name %><% end %><%= f.label :title %><%= f.text_field :title, required: true, size: 70 %><%= f.label :body %><%= f.text_area :body %><p><%= f.submit 'Save revision' %></p><% end %>

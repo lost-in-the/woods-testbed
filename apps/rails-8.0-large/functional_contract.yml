@@ -1,0 +1,50 @@
+version: 1
+models:
+  Article:
+    associations: [author, publication, revisions, comments, tags, collections]
+    columns: [publication_id, state, scheduled_at, lock_version, comments_count]
+  Comment:
+    associations: [article, parent, replies]
+  Membership:
+    associations: [organization, author]
+  ActivityEvent:
+    associations: [organization, actor, subject]
+  Billing::Subscription:
+    associations: [subscriber, plan, invoices, history]
+  Billing::Payment:
+    associations: [invoice, refunds]
+  Newsletter::Delivery:
+    associations: [campaign, subscriber, engagement_events]
+  Support::Ticket:
+    associations: [subscriber, assignee, subject, messages]
+units:
+  - EditorialWorkflow
+  - PublishArticle
+  - Billing::SubscriptionWorkflow
+  - Billing::CollectPayment
+  - Billing::RefundPayment
+  - Newsletter::SendCampaign
+  - Support::ResolveTicket
+  - PublishDueArticlesJob
+  - Newsletter::DeliverJob
+  - WebhookDeliveryJob
+  - ArticlePolicy
+  - ArticlesController
+  - ArticleRevision
+retrieval:
+  - question: Where is approval of a particular article revision enforced?
+    pattern: EditorialWorkflow
+    expected: EditorialWorkflow
+  - question: What prevents duplicate payment attempts?
+    pattern: CollectPayment
+    expected: Billing::CollectPayment
+  - question: What determines newsletter eligibility?
+    pattern: Newsletter::Campaign
+    expected: Newsletter::Campaign
+  - question: Where is ownership of support tickets validated?
+    pattern: Support::Ticket$
+    expected: Support::Ticket
+# Independent answers for a fresh smoke fixture at its fixed reference time.
+smoke_reports:
+  canopy: { review_backlog: 3, overdue_cents: 12100, newsletter: { bounced: 3, delivered: 32 } }
+  canopy-1: { review_backlog: 1, overdue_cents: 4800, newsletter: { bounced: 2, delivered: 15 } }

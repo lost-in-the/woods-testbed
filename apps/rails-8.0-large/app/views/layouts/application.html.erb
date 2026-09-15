@@ -1,5 +1,23 @@
 <!DOCTYPE html>
-<html>
-  <head><title>Rails 8.0 Large Variant</title></head>
-  <body><%= yield %></body>
-</html>
+<html lang="en">
+<head>
+  <title>Canopy · Publishing desk</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <%= csrf_meta_tags %>
+  <style>
+    :root{color-scheme:light;--ink:#203a30;--muted:#53685e;--line:#d7e0d6;--paper:#f6f7f0}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,sans-serif}header{background:#203a30;color:#fff;padding:20px max(5vw,20px)}header a{color:#fff;margin-right:20px}header strong{font:28px Georgia,serif}main{max-width:1100px;margin:40px auto;padding:0 24px}h1,h2{font-family:Georgia,serif;line-height:1.2}h1{font-size:40px}h2{font-size:26px;margin-top:32px}a{color:#23694d}table{width:100%;border-collapse:collapse;background:white}th,td{padding:12px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:13px;text-transform:uppercase;color:var(--muted)}input,select,textarea,button{font:inherit;padding:9px;border:1px solid #93a99b;border-radius:5px;max-width:100%}textarea{display:block;width:100%;min-height:180px}button,input[type=submit]{background:#245c43;color:white;cursor:pointer}form{margin:16px 0}label{display:block;font-weight:600;margin-top:12px}.button_to{display:inline-block;margin:4px}section,.card{background:white;border:1px solid var(--line);border-radius:8px;padding:20px;margin:16px 0}.metrics{display:flex;gap:16px;flex-wrap:wrap}.metrics .card{flex:1;min-width:180px}.metric{font-size:32px;display:block}.muted,small{color:var(--muted)}.badge{border-radius:20px;padding:3px 10px;background:#e5edde;font-size:13px}nav{margin-top:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere}.notice{background:#e0edcf;padding:12px}footer{margin-top:40px;border-top:1px solid var(--line);padding:20px;color:var(--muted)}
+  </style>
+</head>
+<body>
+<header><strong>Canopy</strong> <span> / Publishing desk</span>
+  <nav><%= link_to 'Overview', root_path %><%= link_to 'Editorial', articles_path %>
+  <% if editor? %><%= link_to 'Collections', collections_path %><%= link_to 'Subscribers', subscribers_path %><%= link_to 'Invoices', billing_invoices_path %><%= link_to 'Newsletters', newsletter_campaigns_path %><%= link_to 'Support', support_tickets_path %><% end %>
+  <%= link_to(current_author ? "Switch identity (#{current_author.name})" : 'Enter demo', demo_session_path) %></nav>
+</header>
+<main>
+<% if current_organization %><p class="muted"><%= current_organization.name %> · <%= editor? ? 'Editor' : 'Author' %></p><% end %>
+<% if notice %><p class="notice"><%= notice %></p><% end %>
+<%= yield %>
+<footer>Canopy testbed · Fictional content and local delivery simulations</footer>
+</main>
+</body></html>

@@ -1,7 +1,1 @@
-<h1>Comments on <%= @article.title %></h1>
-<%= link_to "Back to article", article_path(@article) %>
-<ul>
-  <% @comments.each do |comment| %>
-    <li><%= comment.body %></li>
-  <% end %>
-</ul>
+<h1>Discussion · <%= @article.title %></h1><%= link_to 'Back to story', article_path(@article) %><% @comments.each do |comment| %><section><small>#<%= comment.id %> · <%= comment.author&.name || 'Guest reader' %><%= " · Reply to ##{comment.parent_id}" if comment.parent_id %><%= ' · Archived' if comment.archived_at %></small><%= simple_format comment.body %></section><% end %><%= render 'shared/pagination', size: @comments.size %><%= form_with url: article_comments_path(@article) do |f| %><%= f.label :body, 'Comment' %><%= f.text_area :body, required: true %><%= f.label :parent_id, 'Reply to comment number (optional)' %><%= f.number_field :parent_id %> <%= f.submit 'Add comment' %><% end %>

@@ -91,6 +91,7 @@ services:
       - bundle-rails-8-large:/bundle
     environment:
       <<: *common-env
+      TESTBED_DATA_PROFILE: "${TESTBED_DATA_PROFILE:-demo}"
 
   # MySQL twin of rails-6.0: the only variant with a real mysql2 handle, so
   # backend-dialect contracts (gem PR lost-in-the/woods#248) reach a live

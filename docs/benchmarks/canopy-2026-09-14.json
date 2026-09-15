@@ -1,0 +1,347 @@
+{
+  "date": "2026-09-14",
+  "testbed_revision": "Canopy working tree (uncommitted)",
+  "record_profiles": [
+    {
+      "fixture_version": 1,
+      "profile": "smoke",
+      "counts": {
+        "organizations": 2,
+        "publications": 4,
+        "memberships": 13,
+        "authors": 13,
+        "articles": 31,
+        "article_revisions": 31,
+        "review_assignments": 28,
+        "review_decisions": 24,
+        "comments": 100,
+        "tags": 4,
+        "article_tags": 30,
+        "collections": 3,
+        "collection_articles": 30,
+        "subscribers": 60,
+        "billing_plans": 3,
+        "billing_subscriptions": 60,
+        "billing_subscription_changes": 65,
+        "billing_invoices": 61,
+        "billing_line_items": 61,
+        "billing_payments": 60,
+        "billing_refunds": 1,
+        "newsletter_campaigns": 3,
+        "newsletter_deliveries": 52,
+        "engagement_events": 120,
+        "support_tickets": 6,
+        "support_ticket_messages": 12,
+        "activity_events": 32,
+        "webhook_endpoints": 2,
+        "webhook_deliveries": 32
+      },
+      "seed_seconds": 2.797,
+      "reference_time": "2026-09-14T12:00:00Z",
+      "woods_sha": "8dce1c4b67d867a885b023416df4de710c0f99a4",
+      "ruby": "3.3.1",
+      "rails": "8.0.5.1",
+      "source_units": 390,
+      "framework_units": 198,
+      "query_ms": {
+        "repetitions": 7,
+        "median": 14.21,
+        "max": 139.15
+      },
+      "answers": {
+        "review_backlog": 3,
+        "overdue_cents": 12100,
+        "newsletter": {
+          "bounced": 3,
+          "delivered": 32
+        }
+      },
+      "rss_kib": 91956
+    },
+    {
+      "fixture_version": 1,
+      "profile": "demo",
+      "counts": {
+        "organizations": 5,
+        "publications": 13,
+        "memberships": 80,
+        "authors": 80,
+        "articles": 600,
+        "article_revisions": 601,
+        "review_assignments": 541,
+        "review_decisions": 480,
+        "comments": 1810,
+        "tags": 4,
+        "article_tags": 600,
+        "collections": 12,
+        "collection_articles": 600,
+        "subscribers": 2000,
+        "billing_plans": 12,
+        "billing_subscriptions": 2000,
+        "billing_subscription_changes": 2181,
+        "billing_invoices": 2001,
+        "billing_line_items": 2001,
+        "billing_payments": 2000,
+        "billing_refunds": 1,
+        "newsletter_campaigns": 9,
+        "newsletter_deliveries": 1283,
+        "engagement_events": 25000,
+        "support_tickets": 200,
+        "support_ticket_messages": 400,
+        "activity_events": 858,
+        "webhook_endpoints": 5,
+        "webhook_deliveries": 858
+      },
+      "seed_seconds": 39.151,
+      "reference_time": "2026-09-14T12:00:00Z",
+      "woods_sha": "8dce1c4b67d867a885b023416df4de710c0f99a4",
+      "ruby": "3.3.1",
+      "rails": "8.0.5.1",
+      "source_units": 390,
+      "framework_units": 198,
+      "query_ms": {
+        "repetitions": 7,
+        "median": 12.84,
+        "max": 131.61
+      },
+      "answers": {
+        "review_backlog": 30,
+        "overdue_cents": 121300,
+        "newsletter": {
+          "bounced": 32,
+          "delivered": 395
+        }
+      },
+      "rss_kib": 93948
+    },
+    {
+      "fixture_version": 1,
+      "profile": "stress",
+      "counts": {
+        "organizations": 25,
+        "publications": 76,
+        "memberships": 500,
+        "authors": 500,
+        "articles": 10000,
+        "article_revisions": 10001,
+        "review_assignments": 9001,
+        "review_decisions": 8000,
+        "comments": 30010,
+        "tags": 4,
+        "article_tags": 10000,
+        "collections": 75,
+        "collection_articles": 10000,
+        "subscribers": 25000,
+        "billing_plans": 75,
+        "billing_subscriptions": 25000,
+        "billing_subscription_changes": 27272,
+        "billing_invoices": 25001,
+        "billing_line_items": 25001,
+        "billing_payments": 25000,
+        "billing_refunds": 1,
+        "newsletter_campaigns": 51,
+        "newsletter_deliveries": 14545,
+        "engagement_events": 200000,
+        "support_tickets": 2500,
+        "support_ticket_messages": 5000,
+        "activity_events": 12769,
+        "webhook_endpoints": 25,
+        "webhook_deliveries": 12769
+      },
+      "seed_seconds": 515.46,
+      "reference_time": "2026-09-14T12:00:00Z",
+      "woods_sha": "8dce1c4b67d867a885b023416df4de710c0f99a4",
+      "ruby": "3.3.1",
+      "rails": "8.0.5.1",
+      "source_units": 390,
+      "framework_units": 198,
+      "query_ms": {
+        "repetitions": 7,
+        "median": 13.82,
+        "max": 141.29
+      },
+      "answers": {
+        "review_backlog": 333,
+        "overdue_cents": 2500,
+        "newsletter": {
+          "bounced": 66,
+          "delivered": 789
+        }
+      },
+      "rss_kib": 116056
+    }
+  ],
+  "source_scale": {
+    "schema": 1,
+    "variant": "RailsEightLarge",
+    "rails_version": "8.0.5.1",
+    "ruby_version": "3.3.1",
+    "woods_gem_sha": "8dce1c4b",
+    "generated": {
+      "generator_version": 1,
+      "seed": 20260729,
+      "scale": 20,
+      "families": 20,
+      "hubs": 8,
+      "file_count": 132,
+      "tree_sha256": "9182f072636583f1268b37e04dc78bafe79e230057edf14667a0b54eb970a07e",
+      "rng_check": 202300
+    },
+    "index": {
+      "total_units": 564,
+      "app_code_units": 366,
+      "rails_source_units": 198,
+      "counts": {
+        "models": 60,
+        "controllers": 31,
+        "graphql": 5,
+        "components": 1,
+        "view_components": 1,
+        "services": 29,
+        "jobs": 27,
+        "mailers": 1,
+        "serializers": 2,
+        "managers": 1,
+        "policies": 3,
+        "validators": 1,
+        "concerns": 4,
+        "routes": 93,
+        "middleware": 1,
+        "i18n": 1,
+        "pundit_policies": 2,
+        "configurations": 4,
+        "engines": 4,
+        "view_templates": 63,
+        "migrations": 3,
+        "action_cable_channels": 1,
+        "scheduled_jobs": 2,
+        "rake_tasks": 6,
+        "state_machines": 1,
+        "events": 1,
+        "decorators": 1,
+        "database_views": 1,
+        "caching": 5,
+        "factories": 4,
+        "test_mappings": 3,
+        "rails_source": 198,
+        "poros": 2,
+        "libs": 2,
+        "packages": 0
+      }
+    },
+    "cold_full_extraction": {
+      "wall_ms": 1423.9,
+      "phases_ms": {
+        "extract": 1200.4,
+        "dedupe": 10.4,
+        "graph_analysis": 1.7,
+        "dependents": 12.9,
+        "git_enrich": 26.6,
+        "normalize": 1.4,
+        "write_and_publish": 170.4
+      }
+    },
+    "incremental": [
+      {
+        "name": "controller",
+        "description": "add an action to ArticlesController (includes a concern, uses Rails.cache)",
+        "path": "app/controllers/articles_controller.rb",
+        "reps": 3,
+        "min_ms": 346.3,
+        "p50_ms": 355.6,
+        "p95_ms": 471.9,
+        "max_ms": 471.9,
+        "units_written_max": 11,
+        "units_written_pct_of_index": 2.0,
+        "rss_mb_after": 153.0
+      },
+      {
+        "name": "model",
+        "description": "add a scope to Article (a kernel model with a concern and 3 associations)",
+        "path": "app/models/article.rb",
+        "reps": 3,
+        "min_ms": 741.9,
+        "p50_ms": 790.8,
+        "p95_ms": 791.8,
+        "max_ms": 791.8,
+        "units_written_max": 95,
+        "units_written_pct_of_index": 16.8,
+        "rss_mb_after": 173.7
+      },
+      {
+        "name": "routes",
+        "description": "add a route (fans out to every ROUTE_CONSUMER type)",
+        "path": "config/routes.rb",
+        "reps": 3,
+        "min_ms": 499.3,
+        "p50_ms": 562.8,
+        "p95_ms": 618.8,
+        "max_ms": 618.8,
+        "units_written_max": 212,
+        "units_written_pct_of_index": 37.6,
+        "rss_mb_after": 203.3
+      },
+      {
+        "name": "schema",
+        "description": "add a column to db/schema.rb (boot-captured; ReloadPolicy says :restart)",
+        "path": "db/schema.rb",
+        "reps": 3,
+        "min_ms": 249.5,
+        "p50_ms": 249.6,
+        "p95_ms": 251.0,
+        "max_ms": 251.0,
+        "units_written_max": 0,
+        "units_written_pct_of_index": 0.0,
+        "rss_mb_after": 206.7
+      }
+    ],
+    "rss_mb": {
+      "before": 81.5,
+      "after": 207.7
+    },
+    "caveats": [
+      "p95 of 3 samples is indicative, not a real tail \u2014 raise WOODS_BENCH_REPS for a meaningful one",
+      "phase breakdown is derived from Extractor log markers, not instrumentation; the extraction path emits no ActiveSupport::Notifications events",
+      "single process, single container \u2014 not a multi-daemon or bind-mount-latency measurement"
+    ]
+  },
+  "extractor_processes": {
+    "schema": 1,
+    "worktrees": 2,
+    "cycles_each": 2,
+    "parent_rss_mb": 134.6,
+    "per_worktree": [
+      {
+        "worktree": 0,
+        "pid": 11,
+        "cycle_ms": [
+          1668.0,
+          1038.6
+        ],
+        "generation": 2,
+        "rss_mb": 129.3,
+        "ok": true
+      },
+      {
+        "worktree": 1,
+        "pid": 14,
+        "cycle_ms": [
+          1666.0,
+          1037.7
+        ],
+        "generation": 2,
+        "rss_mb": 129.3,
+        "ok": true
+      }
+    ],
+    "aggregate_rss_mb": 258.6,
+    "mean_rss_mb": 129.3,
+    "incremental_after_write_ms": 591.8,
+    "host_type": "linux-bind-mount",
+    "caveats": [
+      "forks share the parent heap copy-on-write; summed RSS is an upper bound",
+      "Linux bind mount, not Docker Desktop osxfs/gRPC-FUSE \u2014 the macOS figure needs a macOS host",
+      "measures Extractor cycles directly, not a resident Watch::Daemon event loop"
+    ]
+  }
+}
