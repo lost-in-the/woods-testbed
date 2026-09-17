@@ -19,6 +19,29 @@ RSpec.describe 'Canopy business workflows' do
     expect { @review.decide(old_assignment, outcome: 'approved') }.to raise_error(EditorialWorkflow::InvalidTransition)
     expect(old_assignment.reload.review_decision).to be_nil
   end
+  it 'rejects an obsolete assignment after editing and resubmitting, without writes' do
+    @workflow.submit(@article, reviewer: @editor)
+    old_assignment = @article.latest_revision.review_assignments.first!
+    @workflow.save_draft(@article, title: 'Revised title', body: 'Changed facts')
+    @workflow.submit(@article, reviewer: @editor)
+    current_assignment = @article.latest_revision.review_assignments.first!
+
+    expect(current_assignment.article_revision_id).not_to eq(old_assignment.article_revision_id)
+    expect(@article.reload.state).to eq('in_review')
+    before_decisions = ReviewDecision.count
+
+    expect { @review.decide(old_assignment, outcome: 'approved') }
+      .to raise_error(EditorialWorkflow::InvalidTransition,
+                      'This review is stale; review the latest submitted revision')
+    expect(ReviewDecision.count).to eq(before_decisions)
+    expect(old_assignment.reload.review_decision).to be_nil
+    expect(@article.reload.state).to eq('in_review')
+
+    expect { @review.decide(current_assignment, outcome: 'approved') }
+      .to change(ReviewDecision, :count).by(1)
+    expect(current_assignment.reload.review_decision.outcome).to eq('approved')
+    expect(@article.reload.state).to eq('approved')
+  end
   it 'resets approval when approved content changes' do
     approve_article
     @workflow.save_draft(@article, body: 'Updated report')
