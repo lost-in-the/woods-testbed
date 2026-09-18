@@ -51,6 +51,9 @@ jobs:
       - name: MCP executable exchange helper self-tests
         run: ruby scripts/tools/mcp_executable_exchange_self_test.rb
 
+      - name: Source provenance oracle self-tests
+        run: ruby scripts/tools/source_provenance_self_test.rb
+
       # The gem is checked out here too — cheap, no build — so the contract's
       # type keys can be validated against IndexReader::TYPE_DIRS rather than
       # against a guess. manifest.json's `counts` is keyed by plural directory

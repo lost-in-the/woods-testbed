@@ -307,3 +307,19 @@ file identities and replacement isolation, and removes its generated tree.
 Use `WOODS_CLONE_REPS` to change repetitions or `WOODS_CLONE_SOURCE` to clone an
 existing payload read-only. Choose the actual persistent filesystem; tmpfs can
 hide the cost. These are component timings, not whole-app performance claims.
+
+### Source provenance in incremental comparisons
+
+For Woods versions that publish `source_inputs.json`, the Canopy incremental
+smoke also validates every captured identity with that output's private key.
+Independent outputs use different HMAC keys: the oracle compares named source
+versions, preserving per-consumer retained/current states and boot/runtime
+coverage qualifications. It explicitly checks that an events-only refresh does
+not certify an omitted dirty service. A supporting gem's missing artifact, wrong
+key, malformed path, mismatched generation or unrecognized retained version fails
+the check. Older Woods versions without the source-provenance capability retain
+the existing structural comparisons.
+
+`ruby scripts/tools/source_provenance_self_test.rb` tests the independent oracle
+without Rails or the Woods bundle. Historical fixture bytes stay in memory; the
+private key is never exported with a published payload.
