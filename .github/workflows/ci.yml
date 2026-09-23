@@ -45,11 +45,14 @@ jobs:
 
       - name: Ruby scripts parse
         run: |
-          for f in scripts/*.rb scripts/support/*.rb scripts/tools/*.rb; do ruby -c "$f" >/dev/null; done
+          for f in bin/*.rb scripts/*.rb scripts/support/*.rb scripts/tools/*.rb; do ruby -c "$f" >/dev/null; done
           echo "all scripts parse"
 
       - name: MCP executable exchange helper self-tests
         run: ruby scripts/tools/mcp_executable_exchange_self_test.rb
+
+      - name: Persistent MCP session helper self-tests
+        run: ruby scripts/tools/mcp_session_self_test.rb
 
       - name: Source provenance oracle self-tests
         run: ruby scripts/tools/source_provenance_self_test.rb
@@ -191,6 +194,13 @@ jobs:
           docker compose exec -T rails-8.0-large bin/rails runner script/shared/tools/canopy_dataset_check.rb
           docker compose exec -T rails-8.0-large bin/rails runner script/shared/tools/canopy_incremental_check.rb
 
+      - name: Unsupported Puma refuses managed setup without writes
+        if: matrix.variant == 'rails-6.0'
+        working-directory: woods-testbed
+        run: |
+          docker exec woods-testbed-rails-6.0 \
+            bundle exec ruby /app/script/shared/tools/woods_watch_unsupported_smoke.rb
+
       # woods:clean first, deliberately: a full extraction overwrites unit files
       # but does not prune orphans, so a reused output directory over-reports
       # every count. See lost-in-the/woods#177.
@@ -283,6 +293,15 @@ jobs:
             puts "empty types:      #{empty.empty? ? "none" : empty.join(", ")}"
           ' "$manifest" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload unsupported-Puma refusal evidence
+        if: always() && matrix.variant == 'rails-6.0'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: watcher-unsupported-puma
+          path: woods-testbed/apps/rails-6.0/tmp/woods-watcher-unsupported
+          retention-days: 14
+          if-no-files-found: warn
+
       # Kept for the benchmark rungs: a stored index makes a number from six
       # months ago inspectable rather than merely quotable.
       - name: Upload the extracted index
@@ -291,6 +310,62 @@ jobs:
         with:
           name: index-${{ matrix.variant }}
           path: woods-testbed/apps/${{ matrix.variant }}/tmp/woods
+          retention-days: 14
+          if-no-files-found: warn
+
+  # A separate process owns this test: an already-booted rails runner cannot
+  # prove normal Puma startup, watcher ownership, shutdown, or one live reader.
+  managed-watcher:
+    name: Managed watcher (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [source, artifact]
+    steps:
+      - name: Check out the testbed
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: woods-testbed
+
+      - name: Check out the selected Woods revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: lost-in-the/woods
+          ref: ${{ inputs.woods_ref || 'main' }}
+          path: woods
+
+      - name: Set up Ruby for the host runner and candidate package build
+        uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1
+        with:
+          ruby-version: '3.4'
+
+      - name: Run the isolated managed-watcher acceptance
+        env:
+          ACCEPTANCE_MODE: ${{ matrix.mode }}
+        run: |
+          revision=$(git -C woods rev-parse HEAD)
+          runner="$GITHUB_WORKSPACE/woods-testbed/bin/woods_watch_acceptance.rb"
+          report="$RUNNER_TEMP/watcher-evidence"
+          if [ "$ACCEPTANCE_MODE" = source ]; then
+            ruby "$runner" --woods "$GITHUB_WORKSPACE/woods" \
+              --revision "$revision" --report-dir "$report"
+          else
+            # This is a candidate package build, never a release preparation.
+            artifact="$RUNNER_TEMP/woods-candidate.gem"
+            (cd woods && gem build woods.gemspec --output "$artifact")
+            digest=$(sha256sum "$artifact" | cut -d ' ' -f 1)
+            ruby "$runner" --gem "$artifact" --sha256 "$digest" \
+              --revision "$revision" --report-dir "$report"
+          fi
+
+      - name: Upload watcher evidence and bootstrap logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: watcher-${{ matrix.mode }}
+          path: ${{ runner.temp }}/watcher-evidence
           retention-days: 14
           if-no-files-found: warn
 

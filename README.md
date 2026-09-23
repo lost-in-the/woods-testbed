@@ -119,13 +119,14 @@ woods-testbed/
 │   ├── woods_worktree_smoke.rb          # git provenance in worktrees (#137)
 │   ├── woods_extract_only_boot_smoke.rb # extract-only Index Server boot (#138)
 │   ├── support/                         # shared helpers for smoke scripts
-│   └── tools/                           # generator + benchmark (not run by CI)
+│   └── tools/                           # explicit lifecycle tests, generators, benchmarks
 └── docker-compose.yml
 ```
 
-Two directories, two audiences: everything in `scripts/` runs **inside** a
+Two directories, two audiences: top-level `scripts/*.rb` files run **inside** a
 container via `bin/rails runner script/shared/…`, and everything in `bin/` runs
-**on the host**. The read-only bind mount only covers `scripts/`.
+**on the host**. Tools under `scripts/tools/` are invoked explicitly. The
+read-only bind mount only covers `scripts/`.
 
 ## Quick start
 
@@ -229,6 +230,9 @@ for an unresolvable worktree git dir rather than a stale `GIT_BRANCH`/`GIT_SHA`.
 `woods_extract_only_boot_smoke.rb` asserts the Index Server resolves in
 pattern-only mode without an embedding index (and that `WOODS_REQUIRE_INDEX=1`
 still fails closed).
+
+For the isolated Puma watcher lifecycle test, including an installed `.gem`
+mode and persistent MCP reader, see [Managed watcher acceptance](docs/WATCHER_ACCEPTANCE.md).
 
 ## Interactive Rails console
 
