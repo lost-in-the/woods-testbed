@@ -13,7 +13,7 @@ container installs its own isolated bundle. Start from the testbed checkout:
 ```bash
 ruby bin/woods_watch_acceptance.rb \
   --woods /absolute/path/to/woods \
-  --revision 922d52438407bf32cbd25b713491156955bc5df9 \
+  --revision FULL_WOODS_COMMIT_SHA \
   --report-dir /tmp/woods-watcher-source
 ```
 
@@ -96,13 +96,18 @@ restored before later extraction tests. Managed Puma mode supports Puma 6/7/8;
 the floor fixture is never silently upgraded or counted as a passed lifecycle
 test.
 
+The refusal assertion caught [Woods #544](https://github.com/lost-in-the/woods/issues/544):
+earlier managed-startup candidates printed an error but exited successfully.
+Select a revision containing its fix; the floor check intentionally fails on
+those earlier candidates instead of treating an error message alone as success.
+
 ## CI and helper checks
 
 ```bash
 ruby scripts/tools/mcp_session_self_test.rb
 gh workflow run ci.yml --repo lost-in-the/woods-testbed \
   --ref YOUR_TESTBED_BRANCH \
-  -f woods_ref=922d52438407bf32cbd25b713491156955bc5df9
+  -f woods_ref=FULL_WOODS_COMMIT_SHA
 ```
 
 The managed-watcher source/artifact jobs upload `watcher-source` and
