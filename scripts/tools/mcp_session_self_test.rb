@@ -133,6 +133,9 @@ Dir.mktmpdir('mcp-session-self-test') do |root|
   results << assert('stderr is drained without blocking and only its bounded tail is retained') do
     with_session(fixture, 'stderr') do |session|
       session.request('echo')
+      # A stdout response does not synchronize the separate stderr drainer.
+      # Closing joins both drains before asserting the complete retained tail.
+      session.close
       tail = session.stderr_text
       raise "unexpected buffer size #{tail.bytesize}" unless tail.bytesize <= McpSession::STDERR_LIMIT
       raise 'stderr tail lost' unless tail.end_with?('stderr-tail-marker')
