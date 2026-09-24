@@ -316,33 +316,41 @@ The fixtures live in `scripts/fixtures/discovery_regressions/` and are introduce
 wrappers, so including them in its timing corpus would prevent a matched comparison.
 This option cannot be combined with `--failure-only`.
 
-#### Recorded reference/module qualification — 2026-09-23
+#### Recorded combined qualification — 2026-09-23
 
-Woods candidate `f5f3fd52ce7de2a583f9bf295caa52169f168693` passed all 28
-functional checks from source and again from its installed gem on Ruby 3.3.1 /
-Rails 8.0.5.1. A separate complete run passed 30 checks including five alternating
-pairs per scenario against baseline `ddd58961a887cee4a8f7d51a9ff344b1777202a7`,
-with matching non-Woods dependency versions:
+Woods candidate `8f4cb336c28a5383a9ae0c29e88c22d9eb2c5ae0` passed **53 source
+checks**, including the expanded discovery corpus and five alternating timing
+pairs per scenario, on Ruby 3.3.1 / Rails 8.0.5.1. Its installed gem passed **51
+functional checks** without a source mount. The artifact was first tested from
+a byte-identical candidate tree and rebuilt from the PR revision with the same
+SHA256: `81c940fccf7ccfa2c4373c0bc62aedfdf2527ece2ff76992b517acf3598a7415`.
+
+The complete 30-sample timing run compared baseline
+`ddd58961a887cee4a8f7d51a9ff344b1777202a7` with that combined candidate, using
+matching non-Woods dependencies and no competing local test workload. Timings
+measure the extraction call and exclude Rails/process boot:
 
 | Scenario | Baseline median | Candidate median | Overhead |
 | --- | ---: | ---: | ---: |
-| Full extraction | 1467.493 ms | 1550.660 ms | +5.67% |
-| Leaf edit | 643.888 ms | 838.423 ms | +30.21% |
-| Shared-concern edit | 699.699 ms | 771.534 ms | +10.27% |
+| Full extraction | 1521.833 ms | 1687.408 ms | +10.88% / 166 ms |
+| Leaf edit | 723.185 ms | 881.334 ms | +21.87% / 158 ms |
+| Shared-concern edit | 696.495 ms | 946.466 ms | +35.89% / 250 ms |
 
-Both incremental scenarios exceed the 10% review threshold. Graph nodes grew
-419→421, edges 411→457, and the labelled target's traversal grew 1→9; affected
-leaf/concern units remained 3/5. Median process peak RSS increased approximately
-1.9/3.4/3.0 MiB for full/leaf/concern. Candidate source-reference phase medians
-were 90/130/120 ms; incremental reconciliation medians were 110/100 ms versus
-70/70 ms in the baseline. These results measure the combined candidate on this
-corpus, not isolated module-discovery cost or large-host performance.
+All three exceed the 10% review threshold, and their baseline/candidate ranges
+do not overlap in this run. Nodes grew 419→422, edges 411→460, and the labelled
+target's traversal grew 1→9; affected leaf/concern units remained 3/5. Median
+process peak RSS increased about 2.3/5.4/2.7 MiB for full/leaf/concern.
+Source-reference phase medians were 100/150/140 ms; incremental reconciliation
+was 110/100 ms versus 70/70 ms. These are costs of the combined expansion;
+they do not isolate a particular fix or establish large-host scaling. Woods
+[#475](https://github.com/lost-in-the/woods/issues/475) retains that confirmation
+before release. No edge or traversal cap was added to reduce these costs.
 
-The first timing attempt stopped after 24 samples when the baseline Ruby process
-segfaulted with YJIT enabled. Its evidence was retained separately; the complete
-unchanged rerun above did not pool those partial samples. Both versions reproduced
-the existing whole-index controller ordering limitation; labelled-unit and whole
-graph/cache equivalence passed under the stated comparison contract.
+Labelled-unit and whole graph/cache equivalence passed under the comparison
+contract above. Strict output retains the existing whole-index presentation-order
+differences; this does not claim byte-identical whole indexes. Earlier timing
+attempts and candidates are separate evidence, with no samples pooled into this
+run. This qualification publishes no gem and changes no private host application.
 
 ## Interactive Rails console
 
