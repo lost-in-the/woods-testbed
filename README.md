@@ -318,7 +318,16 @@ This option cannot be combined with `--failure-only`.
 
 #### Recorded combined qualification — 2026-09-23
 
-Woods candidate `8f4cb336c28a5383a9ae0c29e88c22d9eb2c5ae0` passed **53 source
+The final functional candidate, Woods
+`0e2c3acf3d66708ac338f40d60f5c68875fa3445`, passed **51 source checks and 51
+installed-gem checks**, including 20 equivalence comparisons in each lane, on
+Ruby 3.3.1 / Rails 8.0.5.1. This includes the follow-up fix for successful model
+provenance when an optional sibling model fails (Woods #568). The installed gem
+used `Bundler::Source::Rubygems` without a Woods source mount; its SHA256 is
+`82d183f8b524913a20c9a13e09a8f55b45e538305b9223993f60473a4328ae38`.
+Performance was not repeated for this follow-up.
+
+The earlier measured candidate `8f4cb336c28a5383a9ae0c29e88c22d9eb2c5ae0` passed **53 source
 checks**, including the expanded discovery corpus and five alternating timing
 pairs per scenario, on Ruby 3.3.1 / Rails 8.0.5.1. Its installed gem passed **51
 functional checks** without a source mount. The artifact was first tested from
