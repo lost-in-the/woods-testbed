@@ -175,7 +175,7 @@ services:
   # it over the compose network as `redis`, the host port is for smoke runs.
   redis:
     profiles: [backends]
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: woods-testbed-redis
     ports:
       - "${REDIS_PORT:-56379}:6379"
