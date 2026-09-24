@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "description": "Hand-labelled source references, not runtime execution or exhaustive coverage",
+  "positive": [
+    ["poro", "ReferencePoro", "poro", "ReferenceTarget"],
+    ["controller", "ReferenceController", "poro", "ReferenceTarget"],
+    ["model", "ReferenceModel", "poro", "ReferenceTarget"],
+    ["service", "ReferenceService", "poro", "ReferenceTarget"],
+    ["lib", "ReferenceLibrary", "poro", "ReferenceTarget"],
+    ["concern", "ReferenceConcern", "poro", "ReferenceTarget"],
+    ["poro", "ReferenceSpace::Caller", "poro", "ReferenceSpace::ReferenceTarget"],
+    ["poro", "ReferenceModuleCaller", "poro", "ReferenceEncryption"],
+    ["poro", "ReferenceEncryption", "poro", "ReferenceTarget"],
+    ["poro", "ReferenceModuleCaller", "poro", "ReferenceOwnership"],
+    ["poro", "ReferenceOwnership", "poro", "ReferenceTarget"]
+  ],
+  "negative": [
+    ["model", "ReferenceOtherModel", "poro", "ReferenceTarget"],
+    ["poro", "ReferenceNegative", "poro", "ReferenceStringTarget"],
+    ["poro", "ReferenceNegative", "poro", "ReferenceCommentTarget"],
+    ["poro", "ReferenceNegative", "poro", "ReferenceNestedTarget"],
+    ["poro", "ReferenceSpace::Caller", "poro", "ReferenceTarget"],
+    ["poro", "ReferenceArrivalCaller", "poro", "ReferenceLaterTarget"]
+  ],
+  "initially_absent_targets": ["ReferenceLaterTarget"],
+  "standalone_modules": {
+    "singleton": "ReferenceEncryption",
+    "namespace_only_negative": "ReferenceNamespaceOnly",
+    "ownership_transition": "ReferenceOwnership",
+    "changed_includer": "ReferenceModuleIncluder",
+    "expected_types": ["poro", "concern", "poro"]
+  },
+  "deferred": [
+    {"scope": "watch daemon delivery", "status": "this lane uses incremental and refresh writers directly; run watcher acceptance separately"}
+  ]
+}

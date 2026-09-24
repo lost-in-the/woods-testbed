@@ -234,6 +234,104 @@ still fails closed).
 For the isolated Puma watcher lifecycle test, including an installed `.gem`
 mode and persistent MCP reader, see [Managed watcher acceptance](docs/WATCHER_ACCEPTANCE.md).
 
+### Source-reference acceptance
+
+The opt-in runner tests the unreleased #475 source-reference writer and #552
+standalone-module discovery against a hand-labelled corpus in
+`scripts/fixtures/source_references/`. Run it against an exact committed Woods
+checkout:
+
+```bash
+ruby bin/woods_reference_acceptance.rb \
+  --woods /absolute/path/to/woods --revision FULL_40_CHARACTER_SHA \
+  --image woods-testbed-rails-8.0-large:latest --report-dir /tmp/reference-evidence
+```
+
+Use `--docker-sudo` when Docker requires `sudo -n`. Omit `--image` to build a
+temporary Canopy image. For a built package, replace `--woods` with
+`--gem /absolute/path/woods.gem --sha256 EXPECTED_SHA256`; `--revision` records
+that artifact's expected source revision. Source mode archives committed bytes
+and reports dirty working-tree changes as excluded. Artifact mode verifies both
+the supplied digest and the activated installed package, without mounting Woods
+source.
+
+Each run creates a disposable app, bundle, SQLite database and index in its own
+container. Fixture and harness inputs are frozen and mounted read-only. It never
+starts or changes Compose services, application databases or shared bundle
+volumes. The report directory must be new or empty; logs, input digests, loaded
+gem identity and `acceptance.json` survive container cleanup.
+
+Checks cover model callbacks, controller/service/PORO/library/concern callers,
+qualified lexical resolution, string/comment and nested-owner negatives, target
+arrival/deletion, caller edit/removal/rename, targeted refresh, concern changes,
+singleton module lookup and inbound/outbound references, namespace-only exclusion,
+includer-only PORO/concern ownership migration in both directions, and
+failed-extraction publication isolation. Ownership changes leave the module file
+unchanged and compare incremental output with a fresh full extraction.
+One held-open packaged MCP process reads each generation; its supported JSON
+renderer is configured before startup.
+The pass/fail comparison retains every labelled fixture unit field, dependency
+attributes, the complete typed graph (including variants and forward/reverse
+edges), and candidate-cache ownership. Each cache HMAC is verified
+with its own index's private key before key-dependent identities are excluded.
+Incremental comparisons separately report dependents-order, type-index row-order
+and six-decimal PageRank tolerances, matching Woods' existing equivalence oracle;
+repeated full extraction checks strict fixture ordering. Strict whole-index
+differences are also retained: existing Canopy controllers can serialize
+action/chunk order differently across Ruby processes.
+Supplying a baseline runs an independent full/full control to identify that
+pre-existing limitation. Other unit families are not silently normalized.
+
+For five alternating baseline/candidate pairs of full extraction, a leaf edit
+and a shared-concern edit, add:
+
+```bash
+--baseline-woods /absolute/path/to/baseline --baseline-revision BASELINE_FULL_SHA \
+--perf-reps 5 --timeout 3600
+```
+
+Measurements include extraction phase/wall times, process peak RSS, edge counts,
+affected units and fixture traversal size. Rails boot is outside extraction
+timings and inside peak RSS. Median overhead above 10% is a review trigger;
+these small synthetic fixtures do not establish large-host performance. Without
+a baseline, the report explicitly says performance was not run. Watch daemon
+delivery remains a separate acceptance phase; this lane drives the incremental
+and refresh writers directly.
+
+Use `--failure-only` for a targeted repeat of the fixture baseline, live MCP
+facts, failed-publication isolation and validation. The report names that subset;
+it does not claim to rerun mutations or performance. Failure isolation compares
+the generation pointer and every active-payload file's SHA256/tree entry without
+the semantic equivalence normalizations above.
+
+#### Recorded combined qualification — 2026-09-23
+
+Woods candidate `f5f3fd52ce7de2a583f9bf295caa52169f168693` passed all 28
+functional checks from source and again from its installed gem on Ruby 3.3.1 /
+Rails 8.0.5.1. A separate complete run passed 30 checks including five alternating
+pairs per scenario against baseline `ddd58961a887cee4a8f7d51a9ff344b1777202a7`,
+with matching non-Woods dependency versions:
+
+| Scenario | Baseline median | Candidate median | Overhead |
+| --- | ---: | ---: | ---: |
+| Full extraction | 1467.493 ms | 1550.660 ms | +5.67% |
+| Leaf edit | 643.888 ms | 838.423 ms | +30.21% |
+| Shared-concern edit | 699.699 ms | 771.534 ms | +10.27% |
+
+Both incremental scenarios exceed the 10% review threshold. Graph nodes grew
+419→421, edges 411→457, and the labelled target's traversal grew 1→9; affected
+leaf/concern units remained 3/5. Median process peak RSS increased approximately
+1.9/3.4/3.0 MiB for full/leaf/concern. Candidate source-reference phase medians
+were 90/130/120 ms; incremental reconciliation medians were 110/100 ms versus
+70/70 ms in the baseline. These results measure the combined candidate on this
+corpus, not isolated module-discovery cost or large-host performance.
+
+The first timing attempt stopped after 24 samples when the baseline Ruby process
+segfaulted with YJIT enabled. Its evidence was retained separately; the complete
+unchanged rerun above did not pool those partial samples. Both versions reproduced
+the existing whole-index controller ordering limitation; labelled-unit and whole
+graph/cache equivalence passed under the stated comparison contract.
+
 ## Interactive Rails console
 
 ```bash
