@@ -157,7 +157,7 @@ services:
   # ever runs PostgreSQL cannot catch a PostgreSQL-only assumption.
   mysql:
     profiles: [backends]
-    image: mysql:8
+    image: mysql:26
     container_name: woods-testbed-mysql
     environment:
       MYSQL_ROOT_PASSWORD: woods
