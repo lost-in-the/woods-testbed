@@ -9,8 +9,10 @@ require 'timeout'
 require 'woods'
 require_relative '../support/mcp_session'
 require_relative '../support/reference_snapshot'
+require_relative '../support/reference_discovery_cases'
 
 class ReferenceAcceptance
+  include ReferenceDiscoveryCases
   LEAF = 'app/models/reference_poro.rb'
   CONCERN = 'app/models/concerns/reference_concern.rb'
   ARRIVAL = 'app/models/reference_later_target.rb'
@@ -60,6 +62,9 @@ class ReferenceAcceptance
     failure_case!
     check('final index validates') { command(['bin/rails', 'woods:validate']) }
     performance! if ENV['WOODS_REFERENCE_BASELINE_GEMFILE']
+    # Introduce the audit fixtures after measurements: the old baseline cannot
+    # publish these valid Struct/Data wrappers, so they cannot be its corpus.
+    discovery_regressions! if ENV['WOODS_REFERENCE_DISCOVERY_REGRESSIONS'] == '1'
     @passed = true
   rescue StandardError => error
     @error = "#{error.class}: #{error.message}"
@@ -73,6 +78,7 @@ class ReferenceAcceptance
     end
     report = { status: @passed ? 'PASS' : 'FAIL', identity: @identity, checks: @checks,
                check_selection: ENV['WOODS_REFERENCE_FAILURE_ONLY'] == '1' ? 'failure_only' : 'full',
+               discovery_regressions: ENV['WOODS_REFERENCE_DISCOVERY_REGRESSIONS'] == '1',
                operations: @operations, equivalences: @equivalences, reader_pid: @reader_pid, error: @error,
                corpus: @corpus, performance: @performance || { status: 'NOT_RUN', reason: 'no baseline supplied' },
                coverage: 'synthetic Rails 8 Canopy corpus; source references, not execution coverage' }
@@ -427,7 +433,7 @@ class ReferenceAcceptance
       output.puts(args.inspect)
       pid = Process.spawn(env, *args, out: output, err: [:child, :out], pgroup: true)
       _, status = Timeout.timeout(180) { Process.wait2(pid) }
-      raise "command failed (#{status.exitstatus}): #{args.inspect}; see #{log}" unless status.success? || allow_failure
+      raise "command failed (#{status.exitstatus || "signal #{status.termsig}"}): #{args.inspect}; see #{log}" unless status.success? || allow_failure
       status
     ensure
       if pid

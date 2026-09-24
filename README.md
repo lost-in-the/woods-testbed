@@ -304,7 +304,19 @@ it does not claim to rerun mutations or performance. Failure isolation compares
 the generation pointer and every active-payload file's SHA256/tree entry without
 the semantic equivalence normalizations above.
 
-#### Recorded combined qualification — 2026-09-23
+Add `--discovery-regressions` when the candidate includes the follow-up fixes for
+Woods #558, #559, #562 and #563. The extra corpus checks class/module/library
+Struct/Data wrappers, unchanged-caller references through value-class transitions,
+schema lookup and source search, inherited/root-qualified/spaced resolvers,
+multiple runtime schemas, and promotion of an existing object to a query root.
+It exercises full, incremental and targeted-refresh publication through the same
+held-open MCP reader, comparing each changed tree with a fresh full extraction.
+The fixtures live in `scripts/fixtures/discovery_regressions/` and are introduced
+**after** any performance matrix: the older baseline cannot publish those valid
+wrappers, so including them in its timing corpus would prevent a matched comparison.
+This option cannot be combined with `--failure-only`.
+
+#### Recorded reference/module qualification — 2026-09-23
 
 Woods candidate `f5f3fd52ce7de2a583f9bf295caa52169f168693` passed all 28
 functional checks from source and again from its installed gem on Ruby 3.3.1 /
