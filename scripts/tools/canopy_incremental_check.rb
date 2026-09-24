@@ -4,6 +4,7 @@ require 'tmpdir'
 require 'fileutils'
 require 'open3'
 require 'json'
+require 'digest'
 require 'woods/mcp/index_reader'
 require_relative '../support/source_provenance'
 begin
@@ -99,11 +100,62 @@ Dir.mktmpdir('canopy-incremental-') do |scratch|
     before = "class ProvenanceOmitted; def call; :before; end; end\n"
     File.write(omitted_path, before)
     run.call('woods:extract')
+    marker_path = File.join(output, 'generation.json')
+    pointer = File.binread(marker_path)
+    relative_payload = JSON.parse(pointer).fetch('payload')
+    raise 'invalid payload path' unless SourceProvenance.safe_path?(relative_payload)
+    payload = File.join(output, relative_payload)
+    raise 'payload escapes index' unless File.realpath(payload).start_with?("#{File.realpath(output)}/")
+    reference_baseline = File.file?(File.join(payload, 'source_references.json'))
+    payload_snapshot = lambda do
+      Dir.glob(File.join(payload, '**', '*'), File::FNM_DOTMATCH).sort.each_with_object({}) do |entry, tree|
+        next if %w[. ..].include?(File.basename(entry))
+        stat = File.lstat(entry)
+        contents = if stat.symlink?
+                     File.readlink(entry)
+                   elsif stat.file?
+                     Digest::SHA256.file(entry).hexdigest
+                   elsif stat.directory?
+                     nil
+                   else
+                     raise "unexpected payload file type: #{entry}"
+                   end
+        tree[entry.delete_prefix("#{payload}/")] = [stat.ftype, stat.mode, contents]
+      end
+    end
+    prior_payload = payload_snapshot.call if reference_baseline
+    prior_service = Woods::MCP::IndexReader.new(output).find_unit('ProvenanceOmitted', type: 'service') if reference_baseline
     File.write(omitted_path, before.sub(':before', ':after'))
-    run.call('woods:refresh[events]')
-    source = source_check.call(omitted => { 'baseline' => before })
-    raise 'omitted service was silently certified' unless source.dig('scopes', 'file:services', omitted) == 'retained:baseline'
-    raise 'event consumer did not advance' unless source.dig('scopes', 'whole:events', omitted) == 'current'
+    if reference_baseline
+      raise 'baseline service is unreadable' unless prior_service && prior_service.fetch('source_code').include?(':before')
+      log, status = Open3.capture2e(env.merge('CHANGED_FILES' => nil), 'bundle', 'exec', 'ruby', 'bin/rails', 'woods:refresh[events]', chdir: scratch)
+      unless !status.success? && log.include?('Source-reference baseline needs a full extraction') && log.include?(omitted)
+        raise "omitted Ruby source did not produce the expected full-baseline refusal: #{log.lines.last(15).join}"
+      end
+      raise 'refused refresh changed the generation pointer' unless File.binread(marker_path) == pointer
+      raise 'refused refresh changed the active payload' unless payload_snapshot.call == prior_payload
+      retained_service = Woods::MCP::IndexReader.new(output).find_unit('ProvenanceOmitted', type: 'service')
+      raise 'refused refresh lost the readable old service' unless retained_service == prior_service
+
+      run.call('woods:extract')
+      run.call('woods:validate')
+      current_service = Woods::MCP::IndexReader.new(output).find_unit('ProvenanceOmitted', type: 'service')
+      unless current_service && current_service.fetch('source_code').include?(':after') &&
+             !current_service.fetch('source_code').include?(':before')
+        raise 'full recovery did not publish the edited service'
+      end
+      source = source_check.call
+      unless source.fetch('unverified_scopes').empty? &&
+             source.fetch('scopes').values.all? { |paths| paths.values.all? { |version| version == 'current' } }
+        raise 'full recovery did not establish current source identities'
+      end
+    else
+      # Older woods_ref selections predate the source-reference baseline guard.
+      run.call('woods:refresh[events]')
+      source = source_check.call(omitted => { 'baseline' => before })
+      raise 'omitted service was silently certified' unless source.dig('scopes', 'file:services', omitted) == 'retained:baseline'
+      raise 'event consumer did not advance' unless source.dig('scopes', 'whole:events', omitted) == 'current'
+    end
   end
 end
 puts 'PASS concern fan-out, unrelated model stability, full equivalence, PORO mutations and source-consumer provenance'
