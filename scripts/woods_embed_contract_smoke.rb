@@ -77,10 +77,17 @@ def skip(name, why)
   puts "  SKIP  #{name} — #{why}"
 end
 
-def reachable?(url, path = '/')
+# Direct connections only (the `nil` proxy argument): an `HTTP_PROXY`/
+# `http_proxy` in the container's environment (a CI overlay, a corporate
+# egress) otherwise makes Net::HTTP route the probe through the proxy, whose
+# own answer read as "up" for a service that was not there at all, and the
+# cases below then ran against nothing. The body check is the other half of
+# the same guard: the service itself, not an intermediary, must have answered.
+def reachable?(url, path = '/', expect: nil)
   uri = URI("#{url}#{path}")
-  Net::HTTP.start(uri.hostname, uri.port, open_timeout: 2, read_timeout: 4) do |http|
-    http.request(Net::HTTP::Get.new(uri)).code.to_i < 500
+  Net::HTTP.start(uri.hostname, uri.port, nil, open_timeout: 2, read_timeout: 4) do |http|
+    response = http.request(Net::HTTP::Get.new(uri))
+    response.code.to_i < 500 && (expect.nil? || response.body.to_s.include?(expect))
   end
 rescue StandardError
   false
@@ -126,7 +133,7 @@ end
 
 def qdrant_points(collection)
   uri = URI("#{QDRANT_URL}/collections/#{collection}")
-  body = Net::HTTP.get(uri)
+  body = Net::HTTP.start(uri.hostname, uri.port, nil) { |h| h.request(Net::HTTP::Get.new(uri)) }.body
   JSON.parse(body).dig('result', 'points_count')
 rescue StandardError
   nil
@@ -134,13 +141,13 @@ end
 
 def delete_collection(collection)
   uri = URI("#{QDRANT_URL}/collections/#{collection}")
-  Net::HTTP.start(uri.hostname, uri.port) { |h| h.request(Net::HTTP::Delete.new(uri)) }
+  Net::HTTP.start(uri.hostname, uri.port, nil) { |h| h.request(Net::HTTP::Delete.new(uri)) }
 rescue StandardError
   nil
 end
 
-OLLAMA_UP = reachable?(OLLAMA_URL, '/api/tags')
-QDRANT_UP = reachable?(QDRANT_URL, '/collections')
+OLLAMA_UP = reachable?(OLLAMA_URL, '/api/tags', expect: '"models"')
+QDRANT_UP = reachable?(QDRANT_URL, '/collections', expect: '"collections"')
 
 puts "=== environment ==="
 puts "index:  #{INDEX_DIR}"
