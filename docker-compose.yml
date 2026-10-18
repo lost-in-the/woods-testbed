@@ -13,6 +13,10 @@ name: woods-testbed
 #
 #   WOODS_GEM_PATH=/path/to/woods-worktree docker compose up rails-8.0
 #
+# WOODS_MAP_GEM_PATH does the same for the Woods Map engine
+# (lost-in-the/woods-map), mounted at /woods in the rails-8.0 variant
+# (woods-testbed#38). Default: the sibling ../woods-map checkout.
+#
 # Ports default to 3010 (Rails 8) and 3011 (Rails 7.2). Override with
 # RAILS_8_PORT / RAILS_72_PORT if those conflict with something else.
 
@@ -25,6 +29,12 @@ x-common-env: &common-env
   # set, so a fixed one here keeps the endpoint usable across variants.
   # Never reuse it outside the testbed.
   WOODS_CONSOLE_MCP_TOKEN: "woods-testbed-console-token-0123456789abcdef"
+  # Test-only bearer token for the Woods Map engine mounted at /woods. A
+  # browser on the host reaches the container from the bridge network, not
+  # loopback, so the map refuses every request until this is set. Open
+  # http://localhost:3010/woods?token=<value> once; it becomes a cookie.
+  # Never reuse it outside the testbed.
+  WOODS_MAP_TOKEN: "woods-testbed-map-token-0123456789abcdef"
 
 services:
   rails-8.0:
@@ -38,6 +48,7 @@ services:
       - ./apps/rails-8.0:/app
       - ./scripts:/app/script/shared:ro
       - ${WOODS_GEM_PATH:-../woods}:/woods-gem:ro
+      - ${WOODS_MAP_GEM_PATH:-../woods-map}:/woods-map-gem:ro
       - bundle-rails-8:/bundle
     environment:
       <<: *common-env
