@@ -1,0 +1,9 @@
+<% provide(:title, @post.title) %>
+<%= render "posts/card", post: @post %>
+<div class="body"><%= simple_format(@post.body) %></div>
+<h3>Comments</h3>
+<ul>
+  <% @comments.each do |comment| %>
+    <li><%= comment.user.name %>: <%= comment.body %></li>
+  <% end %>
+</ul>
