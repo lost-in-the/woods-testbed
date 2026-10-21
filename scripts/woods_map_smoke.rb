@@ -7,7 +7,8 @@
 # against the index the variant just published (woods-testbed#38): the status
 # page, a unit page whose code view links a resolved reference, name search,
 # the impact page's blast radius, and the blog scenario's template reads.
-# The Passage UI names unassigned-variable evaluation as an unavailable rule.
+# The Passage UI either identifies the seeded missing assignment or names
+# the rule as unavailable when that Map/index combination cannot evaluate it.
 # Variants without the engine, or without the blog scenario, skip what they
 # lack. Requests go through the app's own Rack stack from loopback, with the
 # compose environment's WOODS_MAP_TOKEN as a bearer token when one is set.
@@ -75,9 +76,23 @@ if blog
     expect_in.call(fetch.call('/woods/units/model/Post/lifecycle'), 'set_slug', 'notify_subscribers')
   end
 
-  results << assert('the passage exposes @preferences and the limit on unassigned-variable evaluation') do
+  results << assert('the passage matches the assignment-rule capability of the mounted map') do
     body = fetch.call('/woods/units/mailer/MailingListMailer/passage?action_name=new_post')
-    expect_in.call(body, '@preferences', 'unassigned-ivar-read', 'No flag can be raised yet.')
+    expect_in.call(body, '@preferences', 'unassigned-ivar-read')
+    WoodsMap::Repository.open(WoodsMap.configuration.index_path) do |repository|
+      mailer = repository.unit('MailingListMailer', type: 'mailer')
+      passage = WoodsMap::Passage.new(repository, mailer, action: 'new_post')
+      flags = passage.flags if passage.respond_to?(:flags)
+      if flags.nil?
+        expect_in.call(body, 'No flag can be raised yet.')
+      else
+        raise "unexpected flags #{flags.inspect}" unless flags.is_a?(Array) && flags.map(&:ivar) == ['@preferences']
+
+        mailer.fetch('metadata').fetch('action_facts').fetch('new_post')
+        expect_in.call(body, '<span class="iv bad">@preferences</span>,')
+        raise 'assignment facts shown as unavailable' if body.include?('No flag can be raised yet.')
+      end
+    end
   end
 
   WoodsMap::Repository.open(WoodsMap.configuration.index_path) do |repository|
