@@ -35,13 +35,21 @@ fixture = <<~'RUBY'
   assigns = %w[@user @post]
   assigns = ['@post'] if scenario == 'missing_assignment'
   assigns += ['@preferences'] if scenario == 'invented_assignment'
-  facts = { 'new_post' => { 'assigns' => assigns.map { |ivar| { 'ivar' => ivar } } } }
+  file = 'app/mailers/mailing_list_mailer.rb'
+  facts = { 'new_post' => {
+    'file' => file, 'line' => 5,
+    'assigns' => assigns.map { |ivar| { 'ivar' => ivar, 'method' => 'new_post', 'file' => file, 'line' => 6 } },
+    'renders' => [{ 'template' => 'mailing_list_mailer/new_post', 'mail' => true,
+                    'method' => 'new_post', 'file' => file, 'line' => 8 }],
+    'params' => [], 'redirects' => [], 'formats' => []
+  } }
+  facts['new_post'].delete('renders') if %w[incomplete incomplete_known_empty].include?(scenario)
   unavailable = %w[legacy legacy_wrong_ui unavailable unavailable_wrong_ui].include?(scenario)
   WoodsMap::Repository.metadata = unavailable || scenario == 'missing_facts' ? {} : { 'action_facts' => facts }
   unless scenario.start_with?('legacy')
     ivars = case scenario
-            when 'unavailable', 'unavailable_wrong_ui' then nil
-            when 'known_empty' then []
+            when 'unavailable', 'unavailable_wrong_ui', 'complete_facts_nil_flags', 'incomplete' then nil
+            when 'known_empty', 'incomplete_known_empty' then []
             when 'false_flag' then %w[@preferences @post]
             when 'false_user_flag' then %w[@preferences @user]
             when 'duplicate_flag' then %w[@preferences @preferences]
@@ -51,7 +59,8 @@ fixture = <<~'RUBY'
     WoodsMap::Passage.define_method(:flags) { flags }
   end
   base = '@preferences unassigned-ivar-read '
-  unavailable_ui = %w[legacy legacy_with_facts unavailable available_wrong_ui].include?(scenario)
+  unavailable_ui = %w[legacy legacy_with_facts unavailable available_wrong_ui complete_facts_nil_flags
+                      incomplete incomplete_known_empty].include?(scenario)
   body = base + if unavailable_ui
                   'No flag can be raised yet.'
                 elsif scenario == 'missing_flag_ui'
@@ -82,7 +91,8 @@ RUBY
 
 smoke = File.expand_path('../woods_map_smoke.rb', __dir__)
 scenarios = {
-  'legacy' => true, 'legacy_with_facts' => true, 'unavailable' => true, 'available' => true,
+  'legacy' => true, 'legacy_with_facts' => true, 'unavailable' => true, 'available' => true, 'incomplete' => true,
+  'complete_facts_nil_flags' => false, 'incomplete_known_empty' => false,
   'known_empty' => false, 'false_flag' => false, 'false_user_flag' => false, 'duplicate_flag' => false,
   'missing_assignment' => false,
   'invented_assignment' => false, 'missing_facts' => false, 'missing_flag_ui' => false,

@@ -82,15 +82,18 @@ if blog
     WoodsMap::Repository.open(WoodsMap.configuration.index_path) do |repository|
       mailer = repository.unit('MailingListMailer', type: 'mailer')
       passage = WoodsMap::Passage.new(repository, mailer, action: 'new_post')
+      facts = mailer.dig('metadata', 'action_facts', 'new_post')
+      complete = facts.is_a?(Hash) && %w[assigns renders].all? { |key| facts[key].is_a?(Array) }
       flags = passage.flags if passage.respond_to?(:flags)
-      if flags.nil?
-        expect_in.call(body, 'No flag can be raised yet.')
-      else
+      if passage.respond_to?(:flags) && complete
         raise "unexpected flags #{flags.inspect}" unless flags.is_a?(Array) && flags.map(&:ivar) == ['@preferences']
 
-        mailer.fetch('metadata').fetch('action_facts').fetch('new_post')
         expect_in.call(body, '<span class="iv bad">@preferences</span>,')
         raise 'assignment facts shown as unavailable' if body.include?('No flag can be raised yet.')
+      else
+        raise 'flags reported without complete action facts' unless flags.nil?
+
+        expect_in.call(body, 'No flag can be raised yet.')
       end
     end
   end
