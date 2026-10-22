@@ -57,6 +57,9 @@ jobs:
       - name: Woods Map smoke capability self-tests
         run: ruby scripts/tools/woods_map_smoke_self_test.rb
 
+      - name: Embed contract HTTP helper self-tests
+        run: ruby scripts/tools/embed_contract_http_self_test.rb
+
       - name: Flow document inventory self-tests
         run: ruby scripts/tools/flow_document_inventory_self_test.rb
 

@@ -51,6 +51,7 @@ require 'woods/tasks'
 require 'woods/generation'
 require 'woods/embedding/indexer'
 require 'woods/embedding/text_preparer'
+require_relative 'support/embed_contract_http'
 
 OLLAMA_URL = ENV.fetch('PROBE_OLLAMA_URL', 'http://host.docker.internal:11434')
 QDRANT_URL = ENV.fetch('PROBE_QDRANT_URL', 'http://qdrant:6333')
@@ -75,15 +76,6 @@ end
 
 def skip(name, why)
   puts "  SKIP  #{name} — #{why}"
-end
-
-def reachable?(url, path = '/')
-  uri = URI("#{url}#{path}")
-  Net::HTTP.start(uri.hostname, uri.port, open_timeout: 2, read_timeout: 4) do |http|
-    http.request(Net::HTTP::Get.new(uri)).code.to_i < 500
-  end
-rescue StandardError
-  false
 end
 
 # A configuration built in memory, so this script needs no initializer and
@@ -125,22 +117,15 @@ def indexer_for(cfg)
 end
 
 def qdrant_points(collection)
-  uri = URI("#{QDRANT_URL}/collections/#{collection}")
-  body = Net::HTTP.get(uri)
-  JSON.parse(body).dig('result', 'points_count')
-rescue StandardError
-  nil
+  EmbedContractHTTP.qdrant_points(QDRANT_URL, collection)
 end
 
 def delete_collection(collection)
-  uri = URI("#{QDRANT_URL}/collections/#{collection}")
-  Net::HTTP.start(uri.hostname, uri.port) { |h| h.request(Net::HTTP::Delete.new(uri)) }
-rescue StandardError
-  nil
+  EmbedContractHTTP.delete_collection(QDRANT_URL, collection)
 end
 
-OLLAMA_UP = reachable?(OLLAMA_URL, '/api/tags')
-QDRANT_UP = reachable?(QDRANT_URL, '/collections')
+OLLAMA_UP = EmbedContractHTTP.ollama_available?(OLLAMA_URL)
+QDRANT_UP = EmbedContractHTTP.qdrant_available?(QDRANT_URL)
 
 puts "=== environment ==="
 puts "index:  #{INDEX_DIR}"
@@ -215,7 +200,7 @@ if OLLAMA_UP && QDRANT_UP
   puts '=== 3. dimension guard (fail closed before any write) ==='
   results << assert('a width mismatch is refused and the collection is untouched') do
     before = qdrant_points(collection)
-    raise 'no populated collection to guard' unless before.to_i.positive?
+    raise 'no populated collection to guard' unless before.positive?
 
     refused = begin
       indexer_for(config_for(provider: :fake, options: { dimensions: FAKE_DIMS },
