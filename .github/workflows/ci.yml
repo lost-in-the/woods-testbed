@@ -57,6 +57,9 @@ jobs:
       - name: Woods Map smoke capability self-tests
         run: ruby scripts/tools/woods_map_smoke_self_test.rb
 
+      - name: Flow document inventory self-tests
+        run: ruby scripts/tools/flow_document_inventory_self_test.rb
+
       - name: Source provenance oracle self-tests
         run: ruby scripts/tools/source_provenance_self_test.rb
 
