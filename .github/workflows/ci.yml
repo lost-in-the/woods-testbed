@@ -5,7 +5,7 @@ name: CI
 # docs/plans/002-large-app-variant.md §1.4.
 on:
   push:
-    branches: ['**']
+    branches: [main, 'release/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -53,6 +53,12 @@ jobs:
 
       - name: Persistent MCP session helper self-tests
         run: ruby scripts/tools/mcp_session_self_test.rb
+
+      - name: Woods Map smoke capability self-tests
+        run: ruby scripts/tools/woods_map_smoke_self_test.rb
+
+      - name: Flow document inventory self-tests
+        run: ruby scripts/tools/flow_document_inventory_self_test.rb
 
       - name: Source provenance oracle self-tests
         run: ruby scripts/tools/source_provenance_self_test.rb
@@ -129,6 +135,15 @@ jobs:
           repository: lost-in-the/woods
           ref: ${{ inputs.woods_ref || 'main' }}
           path: woods
+
+      # rails-8.0 bundles the Woods Map engine from ${WOODS_MAP_GEM_PATH:-../woods-map}
+      # (woods-testbed#38), so that variant needs the engine as a sibling too.
+      - name: Check out the Woods Map engine as a sibling
+        if: matrix.variant == 'rails-8.0'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: lost-in-the/woods-map
+          path: woods-map
 
       - name: Build the variant image
         working-directory: woods-testbed

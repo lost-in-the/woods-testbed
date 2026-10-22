@@ -209,14 +209,34 @@ if parser_path.file? && renderer_path.file?
     raise "indexed as bare wrapper at #{file}" if file.end_with?('/parser.rb', '/renderer.rb')
   end
 
-  # Incremental leg. The sibling's content is unchanged; the point is the
-  # dispatch — governed naming must survive re-extraction of one wrapper
-  # file and the publish that follows.
-  results << assert('incremental re-extract of parser.rb re-issues the governed child') do
+  # Incremental leg. The point is the dispatch — governed naming must survive
+  # re-extraction of one wrapper file and the publish that follows. Two
+  # probes, because the gem's return contract distinguishes them: identical
+  # registered bytes never enter `touched` (an mtime-only touch is skipped,
+  # not re-issued), while a real content change must re-issue the governed
+  # child. The earlier single probe bumped only the mtime and expected the
+  # child in `touched`, which asserted the pre-2.1 contract.
+  results << assert('incremental run over an mtime-only touch of parser.rb skips the unchanged child') do
     File.utime(Time.now, Time.now, parser_path)
     touched = Woods::Extractor.new(output_dir: output_dir)
                               .extract_changed(['app/services/domain/container/parser.rb'])
-    raise "touched #{touched.inspect}" unless touched.include?('Domain::Container::Parser')
+    raise "touched #{touched.inspect}" if touched.include?('Domain::Container::Parser')
+  end
+
+  results << assert('incremental re-extract of a changed parser.rb re-issues the governed child') do
+    original = parser_path.read
+    begin
+      parser_path.write("#{original}# woods_smoke: content change\n")
+      touched = Woods::Extractor.new(output_dir: output_dir)
+                                .extract_changed(['app/services/domain/container/parser.rb'])
+      raise "touched #{touched.inspect}" unless touched.include?('Domain::Container::Parser')
+    ensure
+      # Leave the tree and the index as they were: restore the bytes, then
+      # let one more incremental run register the restored version.
+      parser_path.write(original)
+      Woods::Extractor.new(output_dir: output_dir)
+                      .extract_changed(['app/services/domain/container/parser.rb'])
+    end
   end
 
   incremental = woods_smoke_index_summaries(output_dir)
