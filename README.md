@@ -282,6 +282,28 @@ action/chunk order differently across Ruby processes.
 Supplying a baseline runs an independent full/full control to identify that
 pre-existing limitation. Other unit families are not silently normalized.
 
+For the bounded verified-constant producer (#751), add
+`--verified-constant-spans` in either source or artifact mode. Both reports name
+the selected `reference_contract`: `verified_constant_spans` or the default
+`dependencies_only`, which remains usable with published Woods lacking span
+metadata. The default does not qualify spans or discard metadata during comparison;
+use the explicit flag for a producer that adds spans on target arrival.
+Span mode requires `metadata.references` even when it is `[]`; missing metadata
+is a failure, never capability detection. Records use `kind: "constant"`,
+`confidence: "verified"`, typed targets, 1-based published-source lines and
+0-based UTF-8 byte columns/lengths. Hand-labelled assertions cover caller edits,
+targeted removal, negative owners and PORO/concern transitions. Arrival changes
+only the expected dependency and span; deletion must restore the entire original
+caller payload, including source, timestamps, Git facts, chunks and other metadata.
+
+This mode cannot be combined with `--failure-only`, which skips mutations. Normal
+CI only syntax-checks this separate runner; it does not qualify these assertions.
+The focused oracle self-test is
+`ruby -I /path/to/woods/lib scripts/support/reference_snapshot_self_test.rb`.
+Qualification still requires full source and installed-artifact runs at pinned
+revisions/digest, including strict repeated-full comparison and failed-publication
+byte isolation. Verified constant spans do not complete #751 or method-target #756.
+
 For five alternating baseline/candidate pairs of full extraction, a leaf edit
 and a shared-concern edit, add:
 
