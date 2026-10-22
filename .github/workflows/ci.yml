@@ -5,7 +5,7 @@ name: CI
 # docs/plans/002-large-app-variant.md §1.4.
 on:
   push:
-    branches: ['**']
+    branches: [main, 'release/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
