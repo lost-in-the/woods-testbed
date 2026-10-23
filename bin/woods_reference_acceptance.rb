@@ -23,6 +23,7 @@ parser = OptionParser.new do |p|
   p.on('--perf-reps N', Integer, 'Pairs per full/leaf/concern scenario; at least 5 (default: 5)') { |v| options[:perf_reps] = v }
   p.on('--failure-only', 'Repeat only fixture baseline, MCP facts, failed-publication isolation and validation') { options[:failure_only] = true }
   p.on('--verified-constant-spans', 'Require exact verified span metadata, including all mutation cases') { options[:spans] = true }
+  p.on('--verified-constant-method-spans', 'Require exact constant spans with direct receiver selectors') { options[:method_spans] = true }
   p.on('--discovery-regressions', 'Also exercise wrapped value classes and multi-schema GraphQL discovery') { options[:discovery_regressions] = true }
   p.on('--report-dir DIR', 'New or empty host evidence directory; default: a retained temporary directory') { |v| options[:report_dir] = File.expand_path(v) }
   p.on('--image NAME', 'Use an existing Canopy Dockerfile image instead of building') { |v| options[:image] = v }
@@ -72,6 +73,8 @@ begin
   raise OptionParser::InvalidArgument, '--failure-only cannot measure a baseline' if options[:failure_only] && options[:baseline]
   raise OptionParser::InvalidArgument, '--failure-only cannot run discovery regressions' if options[:failure_only] && options[:discovery_regressions]
   raise OptionParser::InvalidArgument, '--failure-only cannot qualify verified constant spans' if options[:failure_only] && options[:spans]
+  raise OptionParser::InvalidArgument, 'choose only one verified span contract' if options[:spans] && options[:method_spans]
+  raise OptionParser::InvalidArgument, '--failure-only cannot qualify verified constant method spans' if options[:failure_only] && options[:method_spans]
   if options[:baseline]
     raise OptionParser::InvalidArgument, '--baseline-revision must be a full SHA' unless options[:baseline_revision]&.match?(/\A[0-9a-f]{40}\z/)
     actual = capture!('git', '-C', options[:baseline], 'rev-parse', 'HEAD').strip
@@ -108,7 +111,7 @@ evidence = {
   mode: mode, expected_revision: options[:revision], gem_sha256: options[:sha256],
   check_selection: options[:failure_only] ? 'failure_only' : 'full',
   discovery_regressions: !!options[:discovery_regressions],
-  reference_contract: options[:spans] ? 'verified_constant_spans' : 'dependencies_only',
+  reference_contract: options[:method_spans] ? 'verified_constant_method_spans' : (options[:spans] ? 'verified_constant_spans' : 'dependencies_only'),
   testbed_revision: capture!('git', '-C', repo, 'rev-parse', 'HEAD').strip,
   testbed_dirty: !testbed_status.empty?, testbed_status: testbed_status,
   runner_sha256: Digest::SHA256.file(__FILE__).hexdigest,
@@ -223,6 +226,7 @@ begin
     }
     env['WOODS_REFERENCE_FAILURE_ONLY'] = '1' if options[:failure_only]
     env['WOODS_REFERENCE_VERIFIED_CONSTANT_SPANS'] = '1' if options[:spans]
+    env['WOODS_REFERENCE_VERIFIED_CONSTANT_METHOD_SPANS'] = '1' if options[:method_spans]
     env['WOODS_REFERENCE_DISCOVERY_REGRESSIONS'] = '1' if options[:discovery_regressions]
     mounts = [[fixture, '/fixture'], [harness, '/harness'], [bootstrap, '/bootstrap.rb']]
     if options[:woods]

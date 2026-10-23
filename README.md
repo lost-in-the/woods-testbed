@@ -304,6 +304,50 @@ Qualification still requires full source and installed-artifact runs at pinned
 revisions/digest, including strict repeated-full comparison and failed-publication
 byte isolation. Verified constant spans do not complete #751 or method-target #756.
 
+For the bounded method-selector metadata slice of #756, use
+`--verified-constant-method-spans` instead. Its `reference_contract` is
+`verified_constant_method_spans`; the default and `--verified-constant-spans`
+contracts are unchanged. The flags are mutually exclusive, and method mode also
+requires the full mutation suite. This mode adds a separate synthetic public
+fixture with exact mixed seven/eight-key expectations derived from its source.
+Bare constants and argument constants have exactly the existing seven keys.
+A direct syntactic constant receiver adds only a `method` selector of 1–4,096
+UTF-8 bytes without control characters (punctuation/operators/Unicode are valid);
+its constant coordinates and typed target remain unchanged. `verified` describes
+registry resolution of the constant, including calls to nonexistent methods;
+it does not verify method existence or definition ownership. Chains retain the
+immediate selector (`new` in `ReferenceTarget.new.call`, `send` in
+`ReferenceTarget.send(:generate)`). Compound attribute/index writes retain their
+constant spans without a method annotation, as do unsupported selectors and
+multi-expression receiver groups. Attribute/index assignment targets in `rescue`
+and `for` slots (including nested destructuring) also omit `method`; nested calls
+in their receiver/index arguments keep independent selectors. Ordinary explicit
+setters stay annotated. Parenthesized receivers, `&.` and `::` calls
+retain their immediate selector; `.()` records `call`. Plain setters, index
+reads/writes and unary minus record `value=`, `[]`, `[]=` and `-@`, respectively.
+Nested argument/block calls retain their independent selectors; qualified
+constant occurrences retain their whole span. Existing dynamic-scope exclusions
+remain unchanged. A small public template expands deterministically into ASCII
+and Unicode selectors at 4,096 bytes and over that bound; only supported selectors
+get an eighth key. Malformed present cached selectors must reject the producer
+cache; producer cache-loader qualification awaits the exact reviewed snapshot.
+
+The selector-only caller mutation replaces `generate` with the same-length
+`dispatch`, checks unchanged constant spans and forward/reverse edges through the
+held MCP reader, and compares incremental output with a fresh full extraction.
+Normal source-edit timestamps, chunks and cache hashes can change; the separate
+metadata-only target-arrival/deletion gate still compares the entire caller
+payload exactly. Both strict and semantic snapshots retain all method metadata
+and unknown fields. Corruption self-tests cover missing/wrong/extra selectors,
+argument annotations, duplicate receivers, widened spans and same-length selector
+replacement, with no extra normalization. Run the focused oracle test above and
+`ruby scripts/tools/reference_runner_self_test.rb` for CLI refusal checks, and
+`ruby scripts/tools/reference_method_contract_self_test.rb` for selector bounds,
+encoding and control-character checks without a producer, Rails or Docker.
+These self-tests do not qualify a producer: full
+source and installed-artifact acceptance awaits an exact reviewed producer and
+its final selector bounds/edge contract.
+
 For five alternating baseline/candidate pairs of full extraction, a leaf edit
 and a shared-concern edit, add:
 
