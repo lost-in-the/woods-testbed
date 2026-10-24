@@ -219,6 +219,11 @@ unzip impact-index-<PR>.zip -d apps/rails-8.0/tmp/woods
 docker compose up -d rails-8.0
 ```
 
+Verified end to end on a throwaway pull request (#44, closed) that changed
+`users/show.html.erb`. The run reused the cached base index and posted the
+comment. Its focus link lands on the saved report with the template's row
+opened ([screenshot](docs/impact-comment-focus-1440.png)).
+
 Limits:
 
 - A pull request that changes the variant's `Gemfile` is extracted with the base bundle.
