@@ -235,6 +235,33 @@ for an unresolvable worktree git dir rather than a stale `GIT_BRANCH`/`GIT_SHA`.
 pattern-only mode without an embedding index (and that `WOODS_REQUIRE_INDEX=1`
 still fails closed).
 
+### Woods Map click-only walks
+
+`scripts/support/woods_map_walks.json` writes the two Woods Map design-study
+scenarios (woods-map `docs/design/design-study.md`, the Field Guide
+walkthroughs) as click-only paths over the blog scenario: each step names the
+link to click on the page the previous step landed on and what the next page
+must show. It is the woods-map M1 exit criterion: both scenarios navigable by
+clicking only, with JavaScript on and off, on a Rails 6.0 and an 8.0 host.
+
+- `scripts/woods_map_walk_smoke.rb` follows the walks through the app's Rack
+  stack and the server-rendered HTML, which is the JavaScript-disabled path.
+  It needs no browser or network, so CI runs it in every variant with the
+  other smokes; variants without the engine or the blog scenario skip.
+- `scripts/tools/woods_map_click_walk.cjs` clicks the same links in Chromium
+  with JavaScript on and off and runs axe-core at 1440 and 390 on every page
+  a click lands on. It needs Playwright and a downloaded browser, so it is not
+  part of CI; run it against a variant that is up and extracted:
+
+```bash
+npm install playwright@1 axe-core@4 && npx playwright install chromium
+node scripts/tools/woods_map_click_walk.cjs http://localhost:3010 --token="$WOODS_MAP_TOKEN"   # rails-8.0
+node scripts/tools/woods_map_click_walk.cjs http://localhost:3012 --token="$WOODS_MAP_TOKEN"   # rails-6.0
+```
+
+Steps a variant cannot take are printed as `SKIP` or `NOTE` with the reason:
+the guide is disabled, the author filter needs commit history.
+
 For the isolated Puma watcher lifecycle test, including an installed `.gem`
 mode and persistent MCP reader, see [Managed watcher acceptance](docs/WATCHER_ACCEPTANCE.md).
 

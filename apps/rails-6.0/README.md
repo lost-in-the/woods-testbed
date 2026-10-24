@@ -26,6 +26,10 @@ every other `User` through `MailingListMailer#new_post`, whose HTML template
 reads `@preferences`, which nothing assigns. The seeds create the post before
 any subscriber exists, so seeding never renders that template.
 
+`PostsController` has a `set_post` filter, strong parameters and `posts/`
+templates with a `_card` partial, so both Woods Map walkthroughs run here
+as on rails-8.0 (`scripts/woods_map_walk_smoke.rb`).
+
 The Woods Map engine is bundled from `WOODS_MAP_GEM_PATH` and mounted at
 `/woods`; after `bin/rails woods:extract`, run
 `bin/rails runner script/shared/woods_map_smoke.rb`.
