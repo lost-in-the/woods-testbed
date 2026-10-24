@@ -47,3 +47,8 @@ end
 
 # Woods gem — bind-mounted by the testbed compose file.
 gem "woods", path: "/woods-gem"
+
+# Woods Map engine (lost-in-the/woods-map), bind-mounted beside the gem from
+# WOODS_MAP_GEM_PATH (default: the sibling ../woods-map checkout) and mounted at
+# /woods by config/routes.rb. See woods-testbed#38.
+gem "woods-map", path: "/woods-map-gem"

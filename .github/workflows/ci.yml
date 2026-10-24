@@ -139,10 +139,12 @@ jobs:
           ref: ${{ inputs.woods_ref || 'main' }}
           path: woods
 
-      # rails-8.0 bundles the Woods Map engine from ${WOODS_MAP_GEM_PATH:-../woods-map}
-      # (woods-testbed#38), so that variant needs the engine as a sibling too.
+      # rails-8.0, rails-7.2 and rails-6.0 bundle the Woods Map engine from
+      # ${WOODS_MAP_GEM_PATH:-../woods-map} (woods-testbed#38), so those variants
+      # need the engine as a sibling too. scripts/woods_map_smoke.rb then runs
+      # against each of them in the shared smoke loop below.
       - name: Check out the Woods Map engine as a sibling
-        if: matrix.variant == 'rails-8.0'
+        if: contains(fromJSON('["rails-8.0", "rails-7.2", "rails-6.0"]'), matrix.variant)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: lost-in-the/woods-map

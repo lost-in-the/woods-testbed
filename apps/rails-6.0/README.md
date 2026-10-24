@@ -17,3 +17,15 @@ docker exec woods-testbed-rails-6.0 bash -lc 'cd /app && bin/rails runner script
 > This variant is validated via Docker/CI rather than the host (Ruby 3.0 / Rails
 > 6.0 aren't installed on most dev machines). The gem's own CI also gates Rails
 > 6.0 through `gemfiles/rails_6.0.gemfile` + the booted-app extraction test.
+
+## Blog scenario and Woods Map
+
+As in rails-8.0 (woods-testbed#38), `Post` includes `Taggable`, sets a slug
+before save and enqueues `NotifySubscribersJob` after commit; the job mails
+every other `User` through `MailingListMailer#new_post`, whose HTML template
+reads `@preferences`, which nothing assigns. The seeds create the post before
+any subscriber exists, so seeding never renders that template.
+
+The Woods Map engine is bundled from `WOODS_MAP_GEM_PATH` and mounted at
+`/woods`; after `bin/rails woods:extract`, run
+`bin/rails runner script/shared/woods_map_smoke.rb`.
