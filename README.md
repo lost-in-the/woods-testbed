@@ -198,6 +198,32 @@ Extraction output lands on the host under
 read-write, so files written inside the container are visible to the
 host and to editors.
 
+## Impact comment on pull requests
+
+`.github/workflows/impact-comment.yml` is the Woods Map M4b exit criterion
+([woods-map#4](https://github.com/lost-in-the/woods-map/issues/4)). It runs on every pull request that changes
+`apps/rails-8.0/` and does what a host app's CI would do:
+
+1. Restore the base commit's index from the Actions cache, or run `woods:extract` on the base tree. The cache key is the base SHA plus the Woods revision.
+2. Put the pull request's tree on top and run `woods:incremental` with `CHANGED_FILES`. The container has no `.git`, so the changed paths are passed in explicitly, along with `GIT_SHA`.
+3. Run `woods:impact[gen:<base>,gen:<head>]` with `FORMAT=markdown`. Woods computes, saves and renders the report.
+4. Post one comment, updated in place on later pushes. The comment is Woods' Markdown plus a focus link to `/woods/impacts/<id>?lens=changed&focus=<changed templates>`. `scripts/tools/impact_comment.rb` builds it.
+
+The link points at the repository variable `WOODS_MAP_URL`, which defaults to
+`http://localhost:3010/woods`. To open it locally:
+
+```bash
+# Download the run's impact-index-<PR> artifact first.
+rm -rf apps/rails-8.0/tmp/woods && mkdir -p apps/rails-8.0/tmp/woods
+unzip impact-index-<PR>.zip -d apps/rails-8.0/tmp/woods
+docker compose up -d rails-8.0
+```
+
+Limits:
+
+- A pull request that changes the variant's `Gemfile` is extracted with the base bundle.
+- A fork's token cannot comment, so a fork's report appears only in the run summary.
+
 ## Running smoke scripts
 
 The smoke scripts live in `scripts/` at the repo root. They're
