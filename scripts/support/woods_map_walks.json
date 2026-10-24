@@ -168,7 +168,7 @@
           "text": [
             "NotifySubscribersJob#perform",
             "find_each",
-            "deliver_later → MailingListMailer#new_post",
+            "MailingListMailer.new_post.deliver_later",
             "async hop, new process: MailingListMailer#new_post"
           ]
         },
