@@ -259,8 +259,30 @@ node scripts/tools/woods_map_click_walk.cjs http://localhost:3010 --token="$WOOD
 node scripts/tools/woods_map_click_walk.cjs http://localhost:3012 --token="$WOODS_MAP_TOKEN"   # rails-6.0
 ```
 
-Steps a variant cannot take are printed as `SKIP` or `NOTE` with the reason:
-the guide is disabled, the author filter needs commit history.
+Steps a variant cannot take are printed as `NOTE` or `SKIP` with the reason
+(the guide is disabled, for example).
+
+Scenario 2 step 4 clicks a commit's author on the mailer's History tab, then
+follows that author across the neighbourhood (woods-map#92). It needs a commit
+table, and a variant publishes one only when its app directory is a git
+checkout, and the compose mounts have no `.git`. The step also needs a
+Woods Map that has the filter. Its `"needs"` list names both capabilities. The
+step is skipped when either is missing. When both are present, a missing link
+fails the step. To walk step 4, give the app a throwaway history before
+extracting:
+
+```bash
+docker exec woods-testbed-rails-8.0 bash -lc \
+  'cd /app && git config --global --add safe.directory /app && script/shared/tools/throwaway_git_history.sh /app'
+docker exec woods-testbed-rails-8.0 bash -lc 'cd /app && bin/rails woods:extract'
+```
+
+The script writes only `.git`: three authors, with the job and the mailer
+changed together six days ago. It refuses an app that already has a `.git`.
+Remove `apps/rails-8.0/.git` from the host when you are done. CI does this
+for rails-8.0 only. rails-7.2 and rails-6.0 stay without git, so they keep
+exercising the skip path and the `"unknown"` provenance the other smokes
+expect.
 
 For the isolated Puma watcher lifecycle test, including an installed `.gem`
 mode and persistent MCP reader, see [Managed watcher acceptance](docs/WATCHER_ACCEPTANCE.md).

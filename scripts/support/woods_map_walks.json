@@ -1,5 +1,5 @@
 {
-  "about": "The two Woods Map design-study scenarios (woods-map docs/design/design-study.md, section 3, Field Guide walkthroughs) as click-only paths over the blog scenario (woods-testbed#38). Each step clicks a link that must exist on the current page, outside the file-tree sheet, and checks where it lands. Read by scripts/woods_map_walk_smoke.rb (server-rendered HTML, the JavaScript-disabled path) and scripts/tools/woods_map_click_walk.mjs (a browser, JavaScript on and off, axe on every landing page).",
+  "about": "The two Woods Map design-study scenarios (woods-map docs/design/design-study.md, section 3, Field Guide walkthroughs) as click-only paths over the blog scenario (woods-testbed#38). Each step clicks a link that must exist on the current page, outside the file-tree sheet, and checks where it lands. Read by scripts/woods_map_walk_smoke.rb (server-rendered HTML, the JavaScript-disabled path) and scripts/tools/woods_map_click_walk.mjs (a browser, JavaScript on and off, axe on every landing page). A step with \"click_prefix\" clicks the first such link; one with \"needs\" is skipped only when a capability it names is missing (commit_table: the index publishes one; author_filter: the mounted Woods Map has it), and otherwise must find its link.",
   "scenarios": [
     {
       "id": "1",
@@ -207,8 +207,42 @@
         },
         {
           "step": "4",
+          "click": "/woods/units/mailer/MailingListMailer",
+          "h1": "MailingListMailer"
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/mailer/MailingListMailer/history",
+          "h1": "MailingListMailer"
+        },
+        {
+          "step": "4",
+          "click_prefix": "/woods/units/mailer/MailingListMailer/history?author=",
+          "needs": [
+            "commit_table",
+            "author_filter"
+          ],
+          "h1": "MailingListMailer",
+          "text": [
+            "Only commits by",
+            "their commits across the neighbourhood"
+          ],
+          "optional": "a variant without .git publishes no commit table (scripts/tools/throwaway_git_history.sh gives rails-8.0 one in CI), and a Woods Map before woods-map#92 has no author filter"
+        },
+        {
+          "step": "4",
           "click_prefix": "/woods/history?author=",
-          "optional": "the map has no author filter yet (woods-map#92), and a variant without .git publishes no commit table"
+          "needs": [
+            "commit_table",
+            "author_filter"
+          ],
+          "h1": "History",
+          "text": [
+            "Only commits by",
+            "NotifySubscribersJob",
+            "Changed together"
+          ],
+          "optional": "a variant without .git publishes no commit table (scripts/tools/throwaway_git_history.sh gives rails-8.0 one in CI), and a Woods Map before woods-map#92 has no author filter"
         }
       ],
       "not_walked": [

@@ -54,7 +54,16 @@ async function axeOn(browser, url, html, js) {
   return results;
 }
 
-async function walk(browser, scenario, js) {
+// What a step's "needs" names (woods-map#92: the author filter needs a commit
+// table). /woods/history says when the generation has none. The browser walk
+// assumes the Woods Map it drives has the author filter; the Rack smoke checks.
+async function capabilities() {
+  const response = await fetch(`${base}/woods/history`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const body = await response.text();
+  return ['author_filter'].concat(response.ok && !body.includes('has no commit table') ? ['commit_table'] : []);
+}
+
+async function walk(browser, scenario, js, available) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, javaScriptEnabled: js,
                                              extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {} });
   const page = await context.newPage();
@@ -64,6 +73,10 @@ async function walk(browser, scenario, js) {
     const label = `step ${step.step}`;
     let href = step.start || step.click;
     let response;
+    const lacking = [].concat(step.needs || []).filter((need) => !available.includes(need));
+    if (lacking.length) {
+      lines.push(`  SKIP  ${label}: no ${lacking.map((need) => need.replace('_', ' ')).join(', ')} here (${step.optional})`); continue;
+    }
     if (step.start) {
       response = await page.goto(base + href, { waitUntil: 'load' });
     } else {
@@ -71,6 +84,9 @@ async function walk(browser, scenario, js) {
       let candidates;
       if (step.click_prefix) {
         candidates = page.locator(`a[href^="${step.click_prefix}"]:visible`);
+        if (await candidates.count() === 0 && step.needs) {
+          failures += 1; lines.push(`  FAIL  ${label}: no visible link starting ${step.click_prefix} on ${page.url()}`); break;
+        }
         if (await candidates.count() === 0) { lines.push(`  SKIP  ${label}: no link starting ${step.click_prefix} (${step.optional})`); continue; }
         href = await candidates.first().getAttribute('href');
       } else {
@@ -116,11 +132,12 @@ async function walk(browser, scenario, js) {
 (async () => {
   if (out) fs.mkdirSync(out, { recursive: true });
   const browser = await chromium.launch();
+  const available = await capabilities();
   let failures = 0;
   for (const js of [true, false]) {
     for (const scenario of walks.scenarios) {
       console.log(`--- Scenario ${scenario.id} (${scenario.title}), JavaScript ${js ? 'on' : 'off'}`);
-      const result = await walk(browser, scenario, js);
+      const result = await walk(browser, scenario, js, available);
       result.lines.forEach((line) => console.log(line));
       failures += result.failures;
     }
