@@ -167,6 +167,10 @@ WOODS_GEM_PATH=/absolute/path/to/woods-feature-branch \
   docker compose up rails-8.0
 ```
 
+`WOODS_MAP_GEM_PATH` does the same for the Woods Map engine, which the
+rails-8.0, rails-7.2 and rails-6.0 variants bundle (default: the sibling
+`../woods-map` checkout).
+
 ### Changing ports
 
 ```bash
@@ -441,8 +445,18 @@ docker compose exec rails-7.2 bin/rails console
   fixtures used by `woods_credentials_smoke.rb` to exercise Console MCP
   redaction across real provider key shapes.
 - **`rails-6.0`:** a minimal `Post`/`Comment` app (controller, job, mailer,
-  routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
+  routes) — **no** `Micropost`/`Relationship`/`Credential` models. It carries
+  the blog scenario below with a minimal `User` (author and subscriber). See
   `apps/rails-6.0/README.md`.
+- **`rails-8.0` / `rails-6.0`:** the blog scenario (woods-testbed#38): `Post`
+  with the `Taggable` concern, a slug set before save and an after_commit that
+  enqueues `NotifySubscribersJob` (no retry policy), `Tag`/`Tagging`, and
+  `MailingListMailer#new_post`, whose HTML template reads the unassigned
+  `@preferences` that Woods Map's passage flag must catch.
+- **`rails-8.0` / `rails-7.2` / `rails-6.0`:** the Woods Map engine
+  (lost-in-the/woods-map) mounted at `/woods`, bundled from
+  `WOODS_MAP_GEM_PATH` (default `../woods-map`) and checked by
+  `scripts/woods_map_smoke.rb` after `woods:extract`.
 - **`rails-8.0` / `rails-7.2` / `rails-6.0`:** an `app/services/domain/container/`
   wrapper-collision fixture (`Parser` and `Renderer`, both opening the same
   `Container` wrapper) for the woods G-1 identifier fix — each file must

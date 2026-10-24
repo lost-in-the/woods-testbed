@@ -47,6 +47,16 @@ end
 
 blog = defined?(MailingListMailer)
 
+# Every variant mounts the engine (woods-testbed#38), but not every variant has
+# the same app: rails-8.0 and rails-7.2 carry the sample app's UsersController
+# and User, the rails-6.0 floor only PostsController and Post. Read the pair
+# this variant's index publishes.
+controller, model = WoodsMap::Repository.open(WoodsMap.configuration.index_path) do |repository|
+  [%w[UsersController User], %w[PostsController Post]].find do |name, _|
+    repository.unit(name, type: 'controller')
+  end
+end || %w[UsersController User]
+
 puts '=== Woods Map smoke ==='
 puts "Rails:       #{Rails.version}"
 puts "Woods Map:   #{WoodsMap::VERSION}"
@@ -58,17 +68,17 @@ results << assert('the status page reports the published generation') do
   expect_in.call(fetch.call('/woods'), 'gen ')
 end
 
-results << assert('a unit page renders the code view and links a resolved reference') do
-  body = fetch.call('/woods/units/controller/UsersController')
-  expect_in.call(body, 'class="cv codeview"', 'href="/woods/units/model/User"')
+results << assert("a unit page renders the code view of #{controller} and links a resolved reference") do
+  body = fetch.call("/woods/units/controller/#{controller}")
+  expect_in.call(body, 'class="cv codeview"', %(href="/woods/units/model/#{model}"))
 end
 
 results << assert('name search finds a unit') do
-  expect_in.call(fetch.call('/woods/search?q=user&in=name'), 'href="/woods/units/model/User"')
+  expect_in.call(fetch.call("/woods/search?q=#{model.downcase}&in=name"), %(href="/woods/units/model/#{model}"))
 end
 
 results << assert('the impact page reads the blast radius of a focus') do
-  expect_in.call(fetch.call('/woods/impact?focus=User&depth=1'), 'Blast radius')
+  expect_in.call(fetch.call("/woods/impact?focus=#{model}&depth=1"), 'Blast radius')
 end
 
 if blog
