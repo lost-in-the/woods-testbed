@@ -58,17 +58,13 @@
         },
         {
           "step": "2",
-          "click": "/woods/units/controller/PostsController/passage",
-          "h1": "PostsController#"
-        },
-        {
-          "step": "2",
-          "click": "/woods/units/controller/PostsController/passage?action_name=create",
-          "h1": "PostsController#create",
+          "click": "/woods/units/controller/PostsController/lifecycle",
+          "h1": "PostsController",
           "text": [
-            "Callback ladder",
-            "after_commit",
-            "NotifySubscribersJob"
+            "PostsController#create",
+            "save implies Post@create",
+            "after_commit notify_subscribers",
+            "NotifySubscribersJob#perform"
           ]
         },
         {
@@ -124,7 +120,6 @@
         }
       ],
       "not_walked": [
-        "step 2 goes through the controller's Passage, whose callback ladder shows after_commit -> NotifySubscribersJob: the Lifecycle tab on controllers draws only model event chains (woods-map#91)",
         "step 5 (\"Explain this model\") needs the guide (M7), which is disabled in the testbed"
       ]
     },
@@ -169,7 +164,13 @@
         {
           "step": "2",
           "click": "/woods/units/job/NotifySubscribersJob/lifecycle",
-          "h1": "NotifySubscribersJob"
+          "h1": "NotifySubscribersJob",
+          "text": [
+            "NotifySubscribersJob#perform",
+            "find_each",
+            "MailingListMailer.new_post.deliver_later",
+            "async hop, new process: MailingListMailer#new_post"
+          ]
         },
         {
           "step": "3",
@@ -185,8 +186,25 @@
           ]
         },
         {
-          "step": "3",
-          "click": "/woods/units/mailer/MailingListMailer/history",
+          "step": "2",
+          "click": "/woods/units/mailer/MailingListMailer/lifecycle",
+          "h1": "MailingListMailer",
+          "text": [
+            "MailingListMailer#new_post",
+            "mailing_list_mailer/new_post.html.erb"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/view_template/mailing_list_mailer/new_post.html.erb",
+          "h1": "mailing_list_mailer/new_post.html.erb",
+          "text": [
+            "@preferences"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/mailer/MailingListMailer",
           "h1": "MailingListMailer"
         },
         {
@@ -198,12 +216,9 @@
           ]
         },
         {
-          "step": "2",
-          "click": "/woods/units/view_template/mailing_list_mailer/new_post.html.erb",
-          "h1": "mailing_list_mailer/new_post.html.erb",
-          "text": [
-            "@preferences"
-          ]
+          "step": "3",
+          "click": "/woods/units/mailer/MailingListMailer/history",
+          "h1": "MailingListMailer"
         },
         {
           "step": "4",
@@ -244,9 +259,6 @@
           ],
           "optional": "a variant without .git publishes no commit table (scripts/tools/throwaway_git_history.sh gives rails-8.0 one in CI), and a Woods Map before woods-map#92 has no author filter"
         }
-      ],
-      "not_walked": [
-        "step 2 lands on the job's Lifecycle tab, which does not yet list perform's operations (woods-map#91); the walk continues to the mailer and its template"
       ]
     }
   ]
