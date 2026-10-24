@@ -4,6 +4,7 @@
     <section>
       <h1>
         <%= gravatar_for @user %>
+        <span class="member-since">Member since <%= @user.created_at.year %></span>
         <%= @user.name %>
       </h1>
     </section>
