@@ -223,6 +223,7 @@ Limits:
 
 - A pull request that changes the variant's `Gemfile` is extracted with the base bundle.
 - A fork's token cannot comment, so a fork's report appears only in the run summary.
+- The artifact leaves out Woods' private identity key (`.source-inputs.key`), so the map's freshness check on a downloaded index may report `unknown`.
 
 ## Running smoke scripts
 
