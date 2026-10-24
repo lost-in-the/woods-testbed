@@ -53,6 +53,16 @@ present = lambda do |requires|
   end
 end
 
+# What a step's "needs" names: a step that needs a capability this variant
+# lacks is skipped; one whose capabilities are all there must find its link.
+# The author filter (woods-map#92) needs a commit table in the published index
+# and a Woods Map that has the filter.
+capabilities = WoodsMap::Repository.open(WoodsMap.configuration.index_path) do |repository|
+  table = repository.respond_to?(:commit_table_state) && repository.commit_table_state == :available
+  table ? ['commit_table'] : []
+end
+capabilities << 'author_filter' if WoodsMap::HistoryView.method_defined?(:author)
+
 failures = 0
 passed = 0
 puts '=== Woods Map click-only walks (server-rendered, JavaScript off) ==='
@@ -72,8 +82,18 @@ WALKS.fetch('scenarios').each do |scenario|
   scenario.fetch('steps').each do |step|
     label = "step #{step['step']}"
     target = step['start'] || step['click']
+    missing_capabilities = Array(step['needs']) - capabilities
+    if missing_capabilities.any?
+      puts "  SKIP  #{label}: no #{missing_capabilities.map { |c| c.tr('_', ' ') }.join(', ')} here (#{step['optional']})"
+      next
+    end
     if step['click_prefix']
       target = doc && clickable.call(doc).find { |href| href.start_with?(step['click_prefix']) }
+      if target.nil? && step['needs']
+        failures += 1
+        puts "  FAIL  #{label}: no link starting #{step['click_prefix']} on #{here}"
+        break
+      end
       unless target
         puts "  SKIP  #{label}: no link starting #{step['click_prefix']} on #{here} (#{step['optional']})"
         next

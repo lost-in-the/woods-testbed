@@ -40,8 +40,8 @@ jobs:
 
       - name: Shell scripts parse and lint
         run: |
-          for f in bin/*.sh; do bash -n "$f"; done
-          shellcheck bin/*.sh
+          for f in bin/*.sh scripts/tools/*.sh; do bash -n "$f"; done
+          shellcheck bin/*.sh scripts/tools/*.sh
 
       - name: Ruby scripts parse
         run: |
@@ -208,6 +208,20 @@ jobs:
         run: |
           docker exec "woods-testbed-${{ matrix.variant }}" \
             bash -lc 'cd /app && bin/rails db:prepare'
+
+      # rails-8.0 only: a throwaway git history (three authors, the job and
+      # the mailer changed together), so Woods publishes a commit table and
+      # the Woods Map walk takes design-study scenario 2 step 4, the author
+      # filter (woods-map#92). The mount has no .git otherwise. rails-7.2 and
+      # rails-6.0 stay without one and keep exercising the skip path. The
+      # container runs as root over a runner-owned mount, so git needs /app
+      # as a safe.directory for this script and for Woods' own git calls.
+      - name: Give rails-8.0 a throwaway git history
+        if: matrix.variant == 'rails-8.0'
+        working-directory: woods-testbed
+        run: |
+          docker exec woods-testbed-rails-8.0 bash -lc \
+            'cd /app && git config --global --add safe.directory /app && script/shared/tools/throwaway_git_history.sh /app'
 
       - name: Canopy application tests and deterministic seeds
         if: matrix.variant == 'rails-8.0-large'
