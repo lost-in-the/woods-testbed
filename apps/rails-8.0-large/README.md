@@ -154,6 +154,28 @@ source families; `TESTBED_DATA_PROFILE` controls rows. Neither substitutes for
 the other. Benchmark timings are descriptive and hardware-dependent; use repeated
 runs on the same machine before setting a latency gate.
 
+### A Packwerk-shaped application at scale
+
+`generate_large_app.rb` multiplies one family shape. For measuring a code
+explorer, whose pages depend on the largest model, the widest controller and
+the hubs of the graph, `generate_scale_app.rb` writes varied packages instead:
+namespaced models with associations, callbacks, scopes and concerns, RESTful
+controllers with filters (one 40-action controller per package), a view per
+action, jobs and mailers, a `package.yml` per package, and optionally a
+throwaway git history. It is deterministic and needs no Rails.
+
+```bash
+# Disposable checkout only. large: 1,500 models, 400 controllers, 300 jobs and mailers.
+docker compose exec -e SCALE=large rails-8.0-large ruby script/shared/tools/generate_scale_app.rb
+docker compose exec rails-8.0-large ruby script/shared/tools/generate_scale_app.rb --history 3000
+docker compose exec rails-8.0-large bin/rails db:migrate woods:extract
+docker compose exec rails-8.0-large ruby script/shared/tools/generate_scale_app.rb --clean
+```
+
+Its output lives under `packs/`, `app/views/<package>/`, `db/scale/` and
+`config/routes_scale.rb` (all gitignored, wired by `config/application.rb`).
+`--history` refuses an app that already has `.git`.
+
 See [the implementation plan](../../docs/plans/003-functional-publishing-app.md)
 and [validation notes](../../docs/canopy-validation.md) for the measured baseline,
 limits, and entity diagram.
