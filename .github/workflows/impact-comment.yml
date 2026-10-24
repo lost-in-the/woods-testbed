@@ -99,7 +99,7 @@ jobs:
       # publish a different index shape, and a different base is a different app.
       - name: Restore the base index
         id: cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: woods-testbed/apps/rails-8.0/tmp/woods
           key: impact-base-rails-8.0-${{ steps.range.outputs.base }}-woods-${{ steps.range.outputs.woods }}
@@ -148,14 +148,14 @@ jobs:
           docker exec -e GIT_SHA="${{ steps.range.outputs.base }}" -e GIT_BRANCH="${{ github.base_ref }}" \
             "woods-testbed-$VARIANT" bash -lc 'cd /app && bin/rails woods:clean && bin/rails woods:extract'
 
-      # Root wrote the index inside the container; the runner must own it to
-      # cache and upload it.
+      # Root wrote the index inside the container, payloads owner-only; the
+      # runner must own it to cache it and read generation.json.
       - name: Take ownership of the base index
         run: sudo chown -R "$(id -u):$(id -g)" "woods-testbed/apps/$VARIANT/tmp"
 
       - name: Save the base index
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: woods-testbed/apps/rails-8.0/tmp/woods
           key: impact-base-rails-8.0-${{ steps.range.outputs.base }}-woods-${{ steps.range.outputs.woods }}
@@ -163,6 +163,12 @@ jobs:
       - name: Record the base generation
         id: base
         run: echo "generation=$(jq -r .number "woods-testbed/apps/$VARIANT/tmp/woods/generation.json")" >> "$GITHUB_OUTPUT"
+
+      # Woods refuses an identity key (.source-inputs.key) that the extracting
+      # UID does not own, so the index goes back to the container's root before
+      # Woods writes to it again. A restored cache is runner-owned too.
+      - name: Return the index to the container's user
+        run: sudo chown -R 0:0 "woods-testbed/apps/$VARIANT/tmp/woods"
 
       # Bootsnap can serve a stale compile of a file just replaced over the bind
       # mount; clear it and pause before the next process boots.
@@ -180,7 +186,6 @@ jobs:
           docker exec -e GIT_SHA="${{ steps.range.outputs.head }}" -e GIT_BRANCH="${{ github.head_ref }}" \
             -e CHANGED_FILES="${{ steps.range.outputs.changed }}" \
             "woods-testbed-$VARIANT" bash -lc 'cd /app && bin/rails woods:incremental'
-          sudo chown -R "$(id -u):$(id -g)" "woods-testbed/apps/$VARIANT/tmp"
 
       # Woods computes, saves and renders the report; the saved ID is what the
       # map's /impacts/<id> page reads.
@@ -188,7 +193,7 @@ jobs:
         id: impact
         if: steps.range.outputs.changed != ''
         run: |
-          head_gen=$(jq -r .number "woods-testbed/apps/$VARIANT/tmp/woods/generation.json")
+          head_gen=$(sudo jq -r .number "woods-testbed/apps/$VARIANT/tmp/woods/generation.json")
           base_gen="${{ steps.base.outputs.generation }}"
           if [ "$head_gen" = "$base_gen" ]; then
             echo "::notice::woods:incremental published no new generation; the change touched nothing Woods indexes."
@@ -235,14 +240,21 @@ jobs:
             echo "$payload" | gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --input - --jq .html_url
           fi
 
+      - name: Take ownership of the index for upload
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "woods-testbed/apps/$VARIANT/tmp" || true
+
       # The index the focus link reads: download it into apps/rails-8.0/tmp/woods
-      # and start rails-8.0 to open the link.
+      # and start rails-8.0 to open the link. The identity key stays out: Woods
+      # never publishes it, and the map does not need it.
       - name: Upload the index
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: impact-index-${{ github.event.pull_request.number }}
-          path: woods-testbed/apps/rails-8.0/tmp/woods
+          path: |
+            woods-testbed/apps/rails-8.0/tmp/woods
+            !woods-testbed/apps/rails-8.0/tmp/woods/.source-inputs.key
           retention-days: 14
           include-hidden-files: true
           if-no-files-found: warn
