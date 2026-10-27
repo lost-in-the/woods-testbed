@@ -83,8 +83,14 @@ require 'woods/extractor'
 begin
   require 'woods/input_rules'
 rescue LoadError
-  # Older gem without the shared fresh-process rule: fall back to its reload policy.
-  require 'woods/reload_policy'
+  # Older gem without the shared fresh-process rule: fall back to its reload
+  # policy, and to no rule at all on a gem that predates both (such a gem
+  # refuses no path, so restart_sensitive? answers false there).
+  begin
+    require 'woods/reload_policy'
+  rescue LoadError
+    nil
+  end
 end
 
 require_relative '../support/woods_phase_logger'
@@ -198,8 +204,10 @@ end
 def restart_sensitive?(relative_path)
   if defined?(Woods::InputRules)
     Woods::InputRules.new.action(relative_path) == :full
-  else
+  elsif defined?(Woods::ReloadPolicy)
     Woods::ReloadPolicy.new.classify(relative_path) == :restart
+  else
+    false # a gem with neither rule accepts every path incrementally
   end
 end
 
