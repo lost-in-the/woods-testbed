@@ -4,10 +4,11 @@
 #
 #   bin/rails runner script/shared/tools/woods_bench_full_extraction.rb
 #
-# when a scenario edits a boot-captured input (db/schema.rb). Such an input is
-# read once at boot, so only a process booted after the edit can extract it
-# truthfully; measuring `extract_all` in the bench's own process would time a
-# run that never saw the change. This process does one full extraction into
+# when a scenario edits a path whose change invalidates boot-captured state
+# (db/schema.rb: the schema cache and column information a Rails process
+# captures once). The gem refuses `extract_changed` over such a path, and a
+# full extraction in the bench's own process would reuse the state that
+# process captured before the edit. This process does one full extraction into
 # WOODS_OUTPUT, times it around `extract_all` alone (its own boot is already
 # over), parses the gem's WOODS_PROFILE phase lines exactly as the bench does,
 # and prints one marker-prefixed JSON line that the bench reads back. Nothing

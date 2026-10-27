@@ -36,16 +36,18 @@
 #   Run db:prepare once, on a fresh database, before the bench and not between
 #   runs: it rewrites db/schema.rb, and on a copied database that already
 #   holds an earlier generation's gen_* tables it collides with the generated
-#   migrations and leaves a rewritten dump behind. The gem treats db/schema.rb
-#   as a boot-captured input: it is read once at boot, so only a fresh Rails
-#   process sees an edit to it, and `extract_changed` refuses such a path
-#   outright. The bench decides that up front from the gem's own rule
-#   (Woods::InputRules) and measures such a scenario (schema) as a full
-#   extraction in a freshly booted `bin/rails runner` child
-#   (woods_bench_full_extraction.rb), timed inside the child so boot stays
-#   excluded. The row and the JSON say so (`mode: full`). Restoring the edit
-#   needs a fresh process too, so each repetition of such a scenario boots
-#   twice.
+#   migrations and leaves a rewritten dump behind. The gem lists db/schema.rb
+#   among the paths whose change invalidates boot-captured state (the schema
+#   cache and column information a Rails process captures once), so
+#   `extract_changed` refuses such a path outright and only a full extraction
+#   in a fresh Rails process is an honest measurement. The bench decides that
+#   up front from the gem's own rule (Woods::InputRules) and measures such a
+#   scenario (schema) as a full extraction in a freshly booted `bin/rails
+#   runner` child (woods_bench_full_extraction.rb), timed inside the child so
+#   boot stays excluded. That sample is a repeat full extraction over the
+#   payload the cold row left behind, not a second cold run, and its RSS is
+#   the child's. The row and the JSON say so (`mode: full`). Restoring the
+#   edit needs a fresh process too, so each repetition boots twice.
 #
 #   WOODS_BENCH_REPS=7          repetitions per scenario (default 7; p95 of 7 is
 #                               the 7th value, so treat p95 as indicative below
@@ -170,11 +172,13 @@ def incremental_cycle(spec)
   touched, mode, measurement = reextract(Woods::Extractor.new(output_dir: INDEX_DIR), spec[:path])
   after = current_manifest&.fetch('total_units', nil)
 
-  # A fresh-process sample reports the child's own RSS; this process never ran it.
+  # A fresh-process sample carries the child's own RSS (nil if the child could
+  # not read it); this process never ran that extraction, so its RSS is not a
+  # substitute. Incremental samples carry this process's RSS.
   { ms: measurement[:wall_ms], phases_ms: measurement[:phases],
     profile_total_ms: measurement[:profile_total_ms], profile_lines: measurement[:profile_lines],
     units_written: touched, index_before: before, index_after: after,
-    rss_mb: measurement.fetch(:rss_mb, nil) || rss_mb, mode: mode }
+    rss_mb: measurement.key?(:rss_mb) ? measurement[:rss_mb] : rss_mb, mode: mode }
 ensure
   if original
     path.write(original)
@@ -183,9 +187,10 @@ ensure
   end
 end
 
-# Boot-captured inputs (db/schema.rb) are read once per Rails process, so an
-# edit to one is invisible here and the gem refuses to re-extract it in this
-# process. Decide that up front from the gem's own rule, never from the
+# The gem refuses `extract_changed` over a path whose change invalidates
+# boot-captured state (db/schema.rb: the schema cache and column information
+# this process captured at boot), because only a fresh process can rebuild
+# that state. Decide that up front from the gem's own rule, never from the
 # wording of its refusal.
 #
 # @param relative_path [String] Rails.root-relative path the scenario edits
@@ -202,16 +207,17 @@ FULL_EXTRACTION_CHILD  = Pathname.new(__dir__).join('woods_bench_full_extraction
 FULL_EXTRACTION_MARKER = 'WOODS_BENCH_FULL_EXTRACTION '
 
 # A full extraction in a freshly booted Rails process, whose boot captures
-# the edited input. Wall time, phases and RSS are the child's own, measured
-# around `extract_all` inside it; the spawn and the boot are excluded, as
-# Rails boot is for every other sample.
+# the schema state the edit invalidated. Wall time, phases and RSS are the
+# child's own, measured around `extract_all` inside it; the spawn and the
+# boot are excluded, as Rails boot is for every other sample. The bootsnap
+# cache is left alone: these apps boot with eager_load off, so app files are
+# first loaded inside the child's timed `eager load` phase, and an emptied
+# cache would charge every compile to the measurement. The edited dump is
+# not loaded as code, and bootsnap keys its entries by mtime and size anyway.
 #
 # @return [Array(Integer, Hash)] units written and the child's measurement
 # @raise [RuntimeError] when the child exits non-zero or reports nothing
 def fresh_process_full_extraction
-  # Bootsnap has served stale compiles of just-edited files; a cold cache
-  # costs only boot time, which is not measured.
-  FileUtils.rm_rf(APP.join('tmp/cache/bootsnap'))
   env = { 'WOODS_OUTPUT' => INDEX_DIR.to_s, 'WOODS_PROFILE' => '1' }
   stdout, stderr, status = Open3.capture3(env, APP.join('bin/rails').to_s, 'runner',
                                           FULL_EXTRACTION_CHILD.to_s, chdir: APP.to_s)
@@ -322,9 +328,10 @@ payload = {
     "p95 of #{REPS} samples is indicative, not a real tail — raise WOODS_BENCH_REPS for a meaningful one",
     'phase breakdown uses WOODS_PROFILE durations; legacy publish excludes nested sync but includes retention; unaccounted includes log rounding',
     'extraction wall time excludes process/Rails boot and mutation/reload setup; single container',
-    'a scenario over a boot-captured input (db/schema.rb) is measured as a full extraction in a freshly booted ' \
-    'bin/rails runner child, timed inside the child, and carries mode=full; restoring the edit boots a second ' \
-    'child per repetition'
+    'a scenario the gem refuses incrementally (db/schema.rb invalidates boot-captured schema state) is measured ' \
+    'as a repeat full extraction over the existing payload in a freshly booted bin/rails runner child, timed ' \
+    'inside the child, and carries mode=full with the child\'s rss_mb; restoring the edit boots a second child ' \
+    'per repetition'
   ]
 }
 

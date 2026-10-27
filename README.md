@@ -546,10 +546,11 @@ The opt-in `scripts/tools/woods_bench.rb` enables `WOODS_PROFILE` during each
 measured extraction and records explicit phase durations, whole-run totals
 when available, and raw profile lines for cold full and incremental samples.
 Run `db:prepare` once on a fresh database before it, never between runs: the
-dump it rewrites (`db/schema.rb`) is a boot-captured input that only a fresh
-Rails process sees, so the `schema` scenario is measured as a full extraction
-in a `bin/rails runner` child process (timed inside the child) and marked
-`mode: full`.
+dump it rewrites (`db/schema.rb`) is a path whose change invalidates the
+schema state a Rails process captures at boot, which the gem refuses to
+re-extract incrementally, so the `schema` scenario is measured as a repeat
+full extraction in a freshly booted `bin/rails runner` child (timed inside
+the child, with the child's RSS) and marked `mode: full`.
 Extraction wall time excludes Rails/process boot and mutation/reload setup.
 The parser subtracts nested payload sync from legacy `publish` measurements;
 newer disjoint profiles keep pointer publication and retention separate.
