@@ -33,6 +33,16 @@
 #   bin/rails db:prepare
 #   bin/rails runner script/shared/tools/woods_bench.rb
 #
+#   Run db:prepare once, on a fresh database, before the bench and not between
+#   runs: it rewrites db/schema.rb, and on a copied database that already
+#   holds an earlier generation's gen_* tables it collides with the generated
+#   migrations and leaves a rewritten dump behind. The gem treats db/schema.rb
+#   as a boot-captured input, so a scenario that edits it (schema) cannot run
+#   incrementally at all: `extract_changed` refuses with "Restart-sensitive
+#   inputs ... require a fresh Rails process". The bench then measures that
+#   scenario as a full extraction and says so (`mode: full` in the row and the
+#   JSON) rather than aborting the run.
+#
 #   WOODS_BENCH_REPS=7          repetitions per scenario (default 7; p95 of 7 is
 #                               the 7th value, so treat p95 as indicative below
 #                               ~20 reps and say so in the output)
@@ -148,24 +158,37 @@ def incremental_cycle(spec)
   before = current_manifest&.fetch('total_units', nil)
 
   extractor = Woods::Extractor.new(output_dir: INDEX_DIR)
-  results, measurement = profile_extraction { extractor.extract_changed([path.to_s]) }
+  (results, mode), measurement = profile_extraction { reextract(extractor, path) }
 
   # extract_changed returns `touched.to_a` — a flat Array of unit identifiers,
   # NOT a Hash keyed by type the way extract_all's result is. Treating it as a
   # Hash silently reports 0 units written for every scenario, which is precisely
-  # the number finding 16 needs.
-  touched = Array(results).size
+  # the number finding 16 needs. A full run (mode 'full') is the per-type Hash.
+  touched = results.is_a?(Hash) ? results.values.sum { |units| Array(units).size } : Array(results).size
   after = current_manifest&.fetch('total_units', nil)
 
   { ms: measurement[:wall_ms], phases_ms: measurement[:phases],
     profile_total_ms: measurement[:profile_total_ms], profile_lines: measurement[:profile_lines],
-    units_written: touched, index_before: before, index_after: after, rss_mb: rss_mb }
+    units_written: touched, index_before: before, index_after: after, rss_mb: rss_mb, mode: mode }
 ensure
   if original
     path.write(original)
     Rails.application.reloader.reload!
-    Woods::Extractor.new(output_dir: INDEX_DIR).extract_changed([path.to_s])
+    reextract(Woods::Extractor.new(output_dir: INDEX_DIR), path)
   end
+end
+
+# An incremental run over the changed path, or — when the gem refuses because
+# the path is a boot-captured input (db/schema.rb) — a full extraction, so the
+# scenario is measured honestly instead of aborting the bench.
+#
+# @return [Array(Object, String)] the extractor's result and the mode run
+def reextract(extractor, path)
+  [extractor.extract_changed([path.to_s]), 'incremental']
+rescue Woods::ExtractionError => e
+  raise unless e.message.include?('Restart-sensitive')
+
+  [extractor.extract_all, 'full']
 end
 
 # ── Run ───────────────────────────────────────────────────────────────────
@@ -207,6 +230,7 @@ results = scenarios.map do |spec|
     'name' => spec[:name],
     'description' => spec[:description],
     'path' => spec[:path],
+    'mode' => samples.map { |s| s[:mode] }.uniq.join('+'),
     'reps' => REPS,
     'min_ms' => times.first,
     'p50_ms' => percentile(times, 0.5),
@@ -217,7 +241,7 @@ results = scenarios.map do |spec|
     'rss_mb_after' => samples.last[:rss_mb],
     'samples' => samples
   }
-  puts "p50 #{row['p50_ms']} ms  p95 #{row['p95_ms']} ms  wrote #{written} units (#{row['units_written_pct_of_index']}% of index)"
+  puts "p50 #{row['p50_ms']} ms  p95 #{row['p95_ms']} ms  wrote #{written} units (#{row['units_written_pct_of_index']}% of index)#{row['mode'] == 'incremental' ? '' : "  mode=#{row['mode']}"}"
   row
 end
 
@@ -241,7 +265,8 @@ payload = {
   'caveats' => [
     "p95 of #{REPS} samples is indicative, not a real tail — raise WOODS_BENCH_REPS for a meaningful one",
     'phase breakdown uses WOODS_PROFILE durations; legacy publish excludes nested sync but includes retention; unaccounted includes log rounding',
-    'extraction wall time excludes process/Rails boot and mutation/reload setup; single process, single container'
+    'extraction wall time excludes process/Rails boot and mutation/reload setup; single process, single container',
+    'a scenario the gem refuses incrementally (restart-sensitive input such as db/schema.rb) is measured as a full extraction and carries mode=full'
   ]
 }
 
