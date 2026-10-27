@@ -1,0 +1,6 @@
+<h1><%= @post.title %></h1>
+<p>Hi <%= @user.name %>, <%= @post.author.name %> published a new post.</p>
+<% if @preferences.digest? %>
+  <p>You will also find it in this week's digest.</p>
+<% end %>
+<p><%= link_to "Read it", post_url(@post) %></p>

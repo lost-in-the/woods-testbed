@@ -5,7 +5,7 @@ name: CI
 # docs/plans/002-large-app-variant.md §1.4.
 on:
   push:
-    branches: ['**']
+    branches: [main, 'release/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -40,8 +40,8 @@ jobs:
 
       - name: Shell scripts parse and lint
         run: |
-          for f in bin/*.sh; do bash -n "$f"; done
-          shellcheck bin/*.sh
+          for f in bin/*.sh scripts/tools/*.sh; do bash -n "$f"; done
+          shellcheck bin/*.sh scripts/tools/*.sh
 
       - name: Ruby scripts parse
         run: |
@@ -53,6 +53,20 @@ jobs:
 
       - name: Persistent MCP session helper self-tests
         run: ruby scripts/tools/mcp_session_self_test.rb
+
+      - name: Woods Map smoke capability self-tests
+        run: ruby scripts/tools/woods_map_smoke_self_test.rb
+
+      - name: Woods Map click walk parses
+        run: |
+          node --check scripts/tools/woods_map_click_walk.cjs
+          ruby -rjson -e 'JSON.parse(File.read("scripts/support/woods_map_walks.json"))'
+
+      - name: Embed contract HTTP helper self-tests
+        run: ruby scripts/tools/embed_contract_http_self_test.rb
+
+      - name: Flow document inventory self-tests
+        run: ruby scripts/tools/flow_document_inventory_self_test.rb
 
       - name: Source provenance oracle self-tests
         run: ruby scripts/tools/source_provenance_self_test.rb
@@ -130,6 +144,17 @@ jobs:
           ref: ${{ inputs.woods_ref || 'main' }}
           path: woods
 
+      # rails-8.0, rails-7.2 and rails-6.0 bundle the Woods Map engine from
+      # ${WOODS_MAP_GEM_PATH:-../woods-map} (woods-testbed#38), so those variants
+      # need the engine as a sibling too. scripts/woods_map_smoke.rb then runs
+      # against each of them in the shared smoke loop below.
+      - name: Check out the Woods Map engine as a sibling
+        if: contains(fromJSON('["rails-8.0", "rails-7.2", "rails-6.0"]'), matrix.variant)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: lost-in-the/woods-map
+          path: woods-map
+
       - name: Build the variant image
         working-directory: woods-testbed
         run: docker compose build ${{ matrix.variant }}
@@ -183,6 +208,20 @@ jobs:
         run: |
           docker exec "woods-testbed-${{ matrix.variant }}" \
             bash -lc 'cd /app && bin/rails db:prepare'
+
+      # rails-8.0 only: a throwaway git history (three authors, the job and
+      # the mailer changed together), so Woods publishes a commit table and
+      # the Woods Map walk takes design-study scenario 2 step 4, the author
+      # filter (woods-map#92). The mount has no .git otherwise. rails-7.2 and
+      # rails-6.0 stay without one and keep exercising the skip path. The
+      # container runs as root over a runner-owned mount, so git needs /app
+      # as a safe.directory for this script and for Woods' own git calls.
+      - name: Give rails-8.0 a throwaway git history
+        if: matrix.variant == 'rails-8.0'
+        working-directory: woods-testbed
+        run: |
+          docker exec woods-testbed-rails-8.0 bash -lc \
+            'cd /app && git config --global --add safe.directory /app && script/shared/tools/throwaway_git_history.sh /app'
 
       - name: Canopy application tests and deterministic seeds
         if: matrix.variant == 'rails-8.0-large'
@@ -295,7 +334,7 @@ jobs:
 
       - name: Upload unsupported-Puma refusal evidence
         if: always() && matrix.variant == 'rails-6.0'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: watcher-unsupported-puma
           path: woods-testbed/apps/rails-6.0/tmp/woods-watcher-unsupported
@@ -306,7 +345,7 @@ jobs:
       # months ago inspectable rather than merely quotable.
       - name: Upload the extracted index
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: index-${{ matrix.variant }}
           path: woods-testbed/apps/${{ matrix.variant }}/tmp/woods
@@ -362,7 +401,7 @@ jobs:
 
       - name: Upload watcher evidence and bootstrap logs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: watcher-${{ matrix.mode }}
           path: ${{ runner.temp }}/watcher-evidence

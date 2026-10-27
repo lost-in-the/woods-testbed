@@ -5,6 +5,6 @@ class ReferenceModuleCaller
   end
 
   def namespace_value
-    ReferenceNamespaceOnly::VALUE
+    ReferenceNamespaceOnly
   end
 end

@@ -9,11 +9,14 @@ require 'timeout'
 require 'woods'
 require_relative '../support/mcp_session'
 require_relative '../support/reference_snapshot'
+require_relative '../support/reference_contract'
 require_relative '../support/reference_discovery_cases'
 
 class ReferenceAcceptance
   include ReferenceDiscoveryCases
   LEAF = 'app/models/reference_poro.rb'
+  METHOD_CALLER = 'app/models/reference_method_caller.rb'
+  SELECTOR_BOUNDS = 'app/models/reference_selector_bounds.rb'
   CONCERN = 'app/models/concerns/reference_concern.rb'
   ARRIVAL = 'app/models/reference_later_target.rb'
   MODULE_INCLUDER = 'app/models/reference_module_includer.rb'
@@ -28,12 +31,23 @@ class ReferenceAcceptance
     @operations = []
     @equivalences = []
     @sequence = 0
+    @methods = ENV['WOODS_REFERENCE_VERIFIED_CONSTANT_METHOD_SPANS'] == '1'
+    @legacy_spans = ENV['WOODS_REFERENCE_VERIFIED_CONSTANT_SPANS'] == '1'
+    @spans = @legacy_spans || @methods
+    @contract = @methods ? 'verified_constant_method_spans' : (@spans ? 'verified_constant_spans' : 'dependencies_only')
     FileUtils.mkdir_p(@report)
   end
 
   def run
+    raise 'choose only one verified span contract' if @methods && @legacy_spans
+    raise 'verified constant spans require the full mutation suite' if @spans && ENV['WOODS_REFERENCE_FAILURE_ONLY'] == '1'
+
     identity!
     %w[app lib].each { |name| FileUtils.cp_r(File.join(@corpus_dir, name, '.'), name) }
+    if @methods
+      FileUtils.cp(File.expand_path('../fixtures/method_references/reference_method_caller.rb', __dir__), METHOD_CALLER)
+      File.write(SELECTOR_BOUNDS, ReferenceContract.selector_bounds_source)
+    end
     check('fresh isolated database prepares') { command(['bin/rails', 'db:prepare']) }
     check('candidate provides the source-reference integration') do
       require 'woods/source_references/pass'
@@ -52,12 +66,22 @@ class ReferenceAcceptance
         assert_edge(*edge, present: false)
       end
     end
+    if @spans
+      check('labelled verified constant spans and negative owners match exactly') do
+        assert_spans('poro', 'ReferencePoro', [receiver('poro', 'ReferenceTarget', 8)])
+        assert_spans('poro', 'ReferenceArrivalCaller', [])
+        assert_spans('poro', 'ReferenceNegative', [])
+        assert_spans('concern', 'ReferenceConcern', [receiver('poro', 'ReferenceTarget', 11)])
+      end
+    end
+    method_spans! if @methods
     module_discovery!
     unless ENV['WOODS_REFERENCE_FAILURE_ONLY'] == '1'
       equivalence!('deterministic repeated full extraction', strict: true)
       baseline_ordering! if ENV['WOODS_REFERENCE_BASELINE_GEMFILE']
       mutation_cases!
       module_ownership_cases!
+      selector_mutation! if @methods
     end
     failure_case!
     check('final index validates') { command(['bin/rails', 'woods:validate']) }
@@ -79,6 +103,7 @@ class ReferenceAcceptance
     report = { status: @passed ? 'PASS' : 'FAIL', identity: @identity, checks: @checks,
                check_selection: ENV['WOODS_REFERENCE_FAILURE_ONLY'] == '1' ? 'failure_only' : 'full',
                discovery_regressions: ENV['WOODS_REFERENCE_DISCOVERY_REGRESSIONS'] == '1',
+               reference_contract: @contract,
                operations: @operations, equivalences: @equivalences, reader_pid: @reader_pid, error: @error,
                corpus: @corpus, performance: @performance || { status: 'NOT_RUN', reason: 'no baseline supplied' },
                coverage: 'synthetic Rails 8 Canopy corpus; source references, not execution coverage' }
@@ -130,6 +155,7 @@ class ReferenceAcceptance
       operation('incremental', paths: [LEAF])
       assert_edge('poro', 'ReferencePoro', 'poro', 'ReferenceTarget', present: false)
       assert_edge('poro', 'ReferencePoro', 'poro', 'ReferenceAlternateTarget', present: true)
+      assert_spans('poro', 'ReferencePoro', [receiver('poro', 'ReferenceAlternateTarget', 8)])
     end
     equivalence!('caller edit agrees with a fresh full extraction')
     check('targeted refresh removes a reference') do
@@ -137,6 +163,7 @@ class ReferenceAcceptance
       operation('refresh', types: ['poros'])
       assert_edge('poro', 'ReferencePoro', 'poro', 'ReferenceAlternateTarget', present: false)
       assert_edge('poro', 'ReferencePoro', 'poro', 'ReferenceTarget', present: false)
+      assert_spans('poro', 'ReferencePoro', [])
     end
     equivalence!('reference removal agrees with full extraction')
     renamed = LEAF.sub('reference_poro', 'reference_renamed_poro')
@@ -147,6 +174,7 @@ class ReferenceAcceptance
       raise 'renamed caller survived under old identity' if units.any? { |unit| unit['identifier'] == 'ReferencePoro' }
       assert_missing('poro', 'ReferencePoro')
       assert_edge('poro', 'ReferenceRenamedPoro', 'poro', 'ReferenceTarget', present: true)
+      assert_spans('poro', 'ReferenceRenamedPoro', [receiver('poro', 'ReferenceTarget', 8)])
     end
     equivalence!('caller rename agrees with full extraction')
     check('caller restoration withdraws its renamed identity') do
@@ -154,15 +182,17 @@ class ReferenceAcceptance
       File.binwrite(LEAF, original)
       operation('incremental', paths: [renamed, LEAF])
       assert_missing('poro', 'ReferenceRenamedPoro')
+      assert_spans('poro', 'ReferencePoro', [receiver('poro', 'ReferenceTarget', 8)])
     end
     equivalence!('caller restoration agrees with full extraction')
     check('target arrival updates an unchanged caller through the same MCP connection') do
       @arrival_before = lookup('poro', 'ReferenceArrivalCaller')
+      expected = ReferenceContract.arrival(@arrival_before, spans: @spans, methods: @methods)
       File.write(ARRIVAL, "class ReferenceLaterTarget\n  def self.generate\n    raise 'must not execute'\n  end\nend\n")
       operation('incremental', paths: [ARRIVAL])
       assert_edge('poro', 'ReferenceArrivalCaller', 'poro', 'ReferenceLaterTarget', present: true)
       after = lookup('poro', 'ReferenceArrivalCaller')
-      raise 'reference-only rewrite refreshed caller metadata' unless after.except('dependencies') == @arrival_before.except('dependencies')
+      ReferenceContract.assert_payload!(after, expected)
     end
     equivalence!('target arrival agrees with full extraction')
     check('target deletion withdraws forward and reverse references') do
@@ -171,6 +201,7 @@ class ReferenceAcceptance
       assert_edge('poro', 'ReferenceArrivalCaller', 'poro', 'ReferenceLaterTarget', present: false)
       raise 'deleted target survived' if units.any? { |unit| unit['identifier'] == 'ReferenceLaterTarget' }
       assert_missing('poro', 'ReferenceLaterTarget')
+      ReferenceContract.assert_payload!(lookup('poro', 'ReferenceArrivalCaller'), @arrival_before)
     end
     equivalence!('target deletion agrees with full extraction')
     check('shared concern edit refreshes its source reference') do
@@ -179,6 +210,7 @@ class ReferenceAcceptance
       operation('incremental', paths: [CONCERN])
       assert_edge('concern', 'ReferenceConcern', 'poro', 'ReferenceTarget', present: false)
       assert_edge('concern', 'ReferenceConcern', 'poro', 'ReferenceAlternateTarget', present: true)
+      assert_spans('concern', 'ReferenceConcern', [receiver('poro', 'ReferenceAlternateTarget', 11)])
     end
     equivalence!('concern edit agrees with full extraction')
   end
@@ -202,6 +234,7 @@ class ReferenceAcceptance
       raise 'singleton method not recorded' unless encryption.dig('metadata', 'class_methods').include?('encrypt')
       assert_edge('poro', 'ReferenceModuleCaller', 'poro', 'ReferenceEncryption', present: true)
       assert_edge('poro', 'ReferenceEncryption', 'poro', 'ReferenceTarget', present: true)
+      assert_spans('poro', 'ReferenceEncryption', [receiver('poro', 'ReferenceTarget', 8)])
     end
     check('namespace-only module stays absent while its child class is indexed') do
       assert_missing('poro', 'ReferenceNamespaceOnly')
@@ -245,6 +278,10 @@ class ReferenceAcceptance
     assert_edge('poro', 'ReferenceModuleCaller', type, 'ReferenceOwnership', present: true)
     caller = lookup('poro', 'ReferenceModuleCaller')
     raise 'old typed module edge survived' if caller.fetch('dependencies').any? { |edge| edge['target'] == 'ReferenceOwnership' && edge['type'] == other }
+    lines = type == 'poro' ? [8, 12] : [9, 13]
+    assert_spans(type, 'ReferenceOwnership', lines.map { |line| receiver('poro', 'ReferenceTarget', line) })
+    assert_spans('poro', 'ReferenceModuleCaller', [receiver('poro', 'ReferenceEncryption', 8, 'encrypt'),
+                                                receiver(type, 'ReferenceOwnership', 9)])
     raise 'held MCP reader was replaced' unless @session.pid == @reader_pid
   end
 
@@ -364,6 +401,57 @@ class ReferenceAcceptance
     data = result.fetch('structuredContent').fetch('data')
     raise "lookup returned wrong identity #{data.inspect[0, 300]}" unless data['identifier'] == identifier && data['type'] == type
     data
+  end
+
+  def receiver(type, target, line, selector = 'generate')
+    span = ReferenceContract.constant(type, target, line)
+    span['method'] = selector if @methods
+    span
+  end
+
+  def method_spans!
+    check('direct receivers, bare/argument constants, chains and compound writes have exact mixed spans') do
+      assert_spans('poro', 'ReferenceMethodCaller', ReferenceContract.method_caller_spans)
+      %w[ReferenceTarget ReferenceAlternateTarget ReferenceSpace::ReferenceTarget].each do |target|
+        assert_edge('poro', 'ReferenceMethodCaller', 'poro', target, present: true)
+      end
+      assert_spans('poro', 'ReferenceSelectorBounds', ReferenceContract.selector_bounds_spans)
+      assert_edge('poro', 'ReferenceSelectorBounds', 'poro', 'ReferenceTarget', present: true)
+    end
+  end
+
+  def selector_mutation!
+    original = File.binread(METHOD_CALLER)
+    before = lookup('poro', 'ReferenceMethodCaller')
+    graph_before = ReferenceSnapshot.json(@index, 'dependency_graph.json')
+    check('held reader observes same-length selector edit with unchanged edges and constant coordinates') do
+      raise 'selector fixture changed' unless original.lines.count("    ReferenceTarget.generate\n") == 1
+
+      File.binwrite(METHOD_CALLER, original.sub('ReferenceTarget.generate', 'ReferenceTarget.dispatch'))
+      operation('incremental', paths: [METHOD_CALLER])
+      after = lookup('poro', 'ReferenceMethodCaller')
+      assert_spans('poro', 'ReferenceMethodCaller', ReferenceContract.method_caller_spans(selector: 'dispatch'))
+      ReferenceContract.assert_selector_edit!(before, after)
+      graph_after = ReferenceSnapshot.json(@index, 'dependency_graph.json')
+      %w[edges reverse reverse_via].each do |field|
+        raise "selector edit changed graph #{field}" unless graph_after.fetch(field).eql?(graph_before.fetch(field))
+      end
+      %w[ReferenceTarget ReferenceAlternateTarget ReferenceSpace::ReferenceTarget].each do |target|
+        assert_edge('poro', 'ReferenceMethodCaller', 'poro', target, present: true)
+      end
+      raise 'held MCP reader was replaced' unless @session.pid == @reader_pid
+    end
+    equivalence!('selector-only incremental edit agrees with a fresh full extraction')
+    check('selector restoration is visible through the held reader') do
+      File.binwrite(METHOD_CALLER, original)
+      operation('incremental', paths: [METHOD_CALLER])
+      assert_spans('poro', 'ReferenceMethodCaller', ReferenceContract.method_caller_spans)
+    end
+    equivalence!('selector restoration agrees with a fresh full extraction')
+  end
+
+  def assert_spans(type, identifier, expected)
+    ReferenceContract.assert_references!(lookup(type, identifier), expected) if @spans
   end
 
   def assert_missing(type, identifier)

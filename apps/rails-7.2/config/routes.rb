@@ -1,4 +1,8 @@
 Rails.application.routes.draw do
+  # Woods Map explorer over the published index (woods-testbed#38). Gated by
+  # WOODS_MAP_TOKEN from the compose environment; loopback needs no token.
+  mount WoodsMap::Engine => "/woods"
+
   root   "static_pages#home"
   get    "/help",   to: "static_pages#help"
   get    "/about",  to: "static_pages#about"

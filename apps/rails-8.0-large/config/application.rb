@@ -45,5 +45,20 @@ module RailsEightLarge
 
     generated_migrate = Rails.root.join("db/generated/migrate")
     config.paths["db/migrate"] << generated_migrate.to_s if generated_migrate.exist?
+
+    # ── The scale tree (scripts/tools/generate_scale_app.rb) ───────────────
+    #
+    # Packwerk-shaped packages under packs/<name>/app/{models,controllers,jobs,mailers}
+    # (as packs-rails would wire them), their views under app/views/<name>/,
+    # their routes and migrations in their own files. All absent until the
+    # generator runs.
+    Dir[Rails.root.join("packs/*/app/*")].sort.each do |dir|
+      config.autoload_paths << dir
+      config.eager_load_paths << dir
+    end
+    scale_routes = Rails.root.join("config/routes_scale.rb")
+    config.paths["config/routes.rb"] << scale_routes.to_s if scale_routes.exist?
+    scale_migrate = Rails.root.join("db/scale/migrate")
+    config.paths["db/migrate"] << scale_migrate.to_s if scale_migrate.exist?
   end
 end

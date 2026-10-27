@@ -33,3 +33,6 @@ apps/*/tmp/woods/
 
 # Local override compose files
 docker-compose.override.yml
+
+# A throwaway history (scripts/tools/throwaway_git_history.sh) is never committed
+apps/*/.git

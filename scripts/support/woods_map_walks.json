@@ -1,0 +1,265 @@
+{
+  "about": "The two Woods Map design-study scenarios (woods-map docs/design/design-study.md, section 3, Field Guide walkthroughs) as click-only paths over the blog scenario (woods-testbed#38). Each step clicks a link that must exist on the current page, outside the file-tree sheet, and checks where it lands. Read by scripts/woods_map_walk_smoke.rb (server-rendered HTML, the JavaScript-disabled path) and scripts/tools/woods_map_click_walk.mjs (a browser, JavaScript on and off, axe on every landing page). A step with \"click_prefix\" clicks the first such link; one with \"needs\" is skipped only when a capability it names is missing (commit_table: the index publishes one; author_filter: the mounted Woods Map has it), and otherwise must find its link.",
+  "scenarios": [
+    {
+      "id": "1",
+      "title": "Plan auto-tagging on posts",
+      "requires": [
+        [
+          "Post",
+          "model"
+        ],
+        [
+          "PostsController",
+          "controller"
+        ],
+        [
+          "posts/show.html.erb",
+          "view_template"
+        ],
+        [
+          "posts/_card.html.erb",
+          "view_template"
+        ]
+      ],
+      "steps": [
+        {
+          "step": "1",
+          "start": "/woods",
+          "h1": "gen"
+        },
+        {
+          "step": "1",
+          "click": "/woods/units",
+          "h1": "Units"
+        },
+        {
+          "step": "1",
+          "click": "/woods/units/model/Post",
+          "h1": "Post",
+          "text": [
+            "PostsController",
+            "Comment"
+          ]
+        },
+        {
+          "step": "1",
+          "click": "/woods/units/model/Post/schema",
+          "h1": "Post",
+          "text": [
+            "posts",
+            "title"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/controller/PostsController",
+          "h1": "PostsController"
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/controller/PostsController/lifecycle",
+          "h1": "PostsController",
+          "text": [
+            "PostsController#create",
+            "save implies Post@create",
+            "after_commit notify_subscribers",
+            "NotifySubscribersJob#perform"
+          ]
+        },
+        {
+          "step": "3",
+          "click": "/woods/units/controller/PostsController/routes",
+          "h1": "PostsController",
+          "text": [
+            "post_path"
+          ]
+        },
+        {
+          "step": "3",
+          "click": "/woods/units/controller/PostsController/passage",
+          "h1": "PostsController#",
+          "text": [
+            "set_post"
+          ]
+        },
+        {
+          "step": "3",
+          "click": "/woods/units/controller/PostsController",
+          "h1": "PostsController",
+          "text": [
+            "post_params"
+          ]
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/controller/PostsController/passage",
+          "h1": "PostsController#"
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/controller/PostsController/passage?action_name=show",
+          "h1": "PostsController#show",
+          "text": [
+            "posts/show.html.erb",
+            "posts/_card.html.erb"
+          ]
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/view_template/posts/show.html.erb",
+          "h1": "posts/show.html.erb",
+          "text": [
+            "@post"
+          ]
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/view_template/posts/_card.html.erb",
+          "h1": "posts/_card.html.erb"
+        }
+      ],
+      "not_walked": [
+        "step 5 (\"Explain this model\") needs the guide (M7), which is disabled in the testbed"
+      ]
+    },
+    {
+      "id": "2",
+      "title": "Mailing list job failing after post creation",
+      "requires": [
+        [
+          "NotifySubscribersJob",
+          "job"
+        ],
+        [
+          "MailingListMailer",
+          "mailer"
+        ],
+        [
+          "mailing_list_mailer/new_post.html.erb",
+          "view_template"
+        ]
+      ],
+      "steps": [
+        {
+          "step": "1",
+          "start": "/woods",
+          "h1": "gen"
+        },
+        {
+          "step": "1",
+          "click": "/woods/units",
+          "h1": "Units"
+        },
+        {
+          "step": "1",
+          "click": "/woods/units/job/NotifySubscribersJob",
+          "h1": "NotifySubscribersJob",
+          "text": [
+            "mailers",
+            "Post",
+            "MailingListMailer"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/job/NotifySubscribersJob/lifecycle",
+          "h1": "NotifySubscribersJob",
+          "text": [
+            "NotifySubscribersJob#perform",
+            "find_each",
+            "MailingListMailer.new_post.deliver_later",
+            "async hop, new process: MailingListMailer#new_post"
+          ]
+        },
+        {
+          "step": "3",
+          "click": "/woods/units/job/NotifySubscribersJob/history",
+          "h1": "NotifySubscribersJob"
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/mailer/MailingListMailer",
+          "h1": "MailingListMailer",
+          "text": [
+            "new_post"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/mailer/MailingListMailer/lifecycle",
+          "h1": "MailingListMailer",
+          "text": [
+            "MailingListMailer#new_post",
+            "mailing_list_mailer/new_post.html.erb"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/view_template/mailing_list_mailer/new_post.html.erb",
+          "h1": "mailing_list_mailer/new_post.html.erb",
+          "text": [
+            "@preferences"
+          ]
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/mailer/MailingListMailer",
+          "h1": "MailingListMailer"
+        },
+        {
+          "step": "2",
+          "click": "/woods/units/mailer/MailingListMailer/passage",
+          "h1": "MailingListMailer#new_post",
+          "text": [
+            "@preferences"
+          ]
+        },
+        {
+          "step": "3",
+          "click": "/woods/units/mailer/MailingListMailer/history",
+          "h1": "MailingListMailer"
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/mailer/MailingListMailer",
+          "h1": "MailingListMailer"
+        },
+        {
+          "step": "4",
+          "click": "/woods/units/mailer/MailingListMailer/history",
+          "h1": "MailingListMailer"
+        },
+        {
+          "step": "4",
+          "click_prefix": "/woods/units/mailer/MailingListMailer/history?author=",
+          "needs": [
+            "commit_table",
+            "author_filter"
+          ],
+          "h1": "MailingListMailer",
+          "text": [
+            "Only commits by",
+            "their commits across the neighbourhood"
+          ],
+          "optional": "a variant without .git publishes no commit table (scripts/tools/throwaway_git_history.sh gives rails-8.0 one in CI), and a Woods Map before woods-map#92 has no author filter"
+        },
+        {
+          "step": "4",
+          "click_prefix": "/woods/history?author=",
+          "needs": [
+            "commit_table",
+            "author_filter"
+          ],
+          "h1": "History",
+          "text": [
+            "Only commits by",
+            "NotifySubscribersJob",
+            "Changed together"
+          ],
+          "optional": "a variant without .git publishes no commit table (scripts/tools/throwaway_git_history.sh gives rails-8.0 one in CI), and a Woods Map before woods-map#92 has no author filter"
+        }
+      ]
+    }
+  ]
+}

@@ -167,6 +167,10 @@ WOODS_GEM_PATH=/absolute/path/to/woods-feature-branch \
   docker compose up rails-8.0
 ```
 
+`WOODS_MAP_GEM_PATH` does the same for the Woods Map engine, which the
+rails-8.0, rails-7.2 and rails-6.0 variants bundle (default: the sibling
+`../woods-map` checkout).
+
 ### Changing ports
 
 ```bash
@@ -231,6 +235,55 @@ for an unresolvable worktree git dir rather than a stale `GIT_BRANCH`/`GIT_SHA`.
 pattern-only mode without an embedding index (and that `WOODS_REQUIRE_INDEX=1`
 still fails closed).
 
+### Woods Map click-only walks
+
+`scripts/support/woods_map_walks.json` writes the two Woods Map design-study
+scenarios (woods-map `docs/design/design-study.md`, the Field Guide
+walkthroughs) as click-only paths over the blog scenario: each step names the
+link to click on the page the previous step landed on and what the next page
+must show. It is the woods-map M1 exit criterion: both scenarios navigable by
+clicking only, with JavaScript on and off, on a Rails 6.0 and an 8.0 host.
+
+- `scripts/woods_map_walk_smoke.rb` follows the walks through the app's Rack
+  stack and the server-rendered HTML, which is the JavaScript-disabled path.
+  It needs no browser or network, so CI runs it in every variant with the
+  other smokes; variants without the engine or the blog scenario skip.
+- `scripts/tools/woods_map_click_walk.cjs` clicks the same links in Chromium
+  with JavaScript on and off and runs axe-core at 1440 and 390 on every page
+  a click lands on. It needs Playwright and a downloaded browser, so it is not
+  part of CI; run it against a variant that is up and extracted:
+
+```bash
+npm install playwright@1 axe-core@4 && npx playwright install chromium
+node scripts/tools/woods_map_click_walk.cjs http://localhost:3010 --token="$WOODS_MAP_TOKEN"   # rails-8.0
+node scripts/tools/woods_map_click_walk.cjs http://localhost:3012 --token="$WOODS_MAP_TOKEN"   # rails-6.0
+```
+
+Steps a variant cannot take are printed as `NOTE` or `SKIP` with the reason
+(the guide is disabled, for example).
+
+Scenario 2 step 4 clicks a commit's author on the mailer's History tab, then
+follows that author across the neighbourhood (woods-map#92). It needs a commit
+table, and a variant publishes one only when its app directory is a git
+checkout, and the compose mounts have no `.git`. The step also needs a
+Woods Map that has the filter. Its `"needs"` list names both capabilities. The
+step is skipped when either is missing. When both are present, a missing link
+fails the step. To walk step 4, give the app a throwaway history before
+extracting:
+
+```bash
+docker exec woods-testbed-rails-8.0 bash -lc \
+  'cd /app && git config --global --add safe.directory /app && script/shared/tools/throwaway_git_history.sh /app'
+docker exec woods-testbed-rails-8.0 bash -lc 'cd /app && bin/rails woods:extract'
+```
+
+The script writes only `.git`: three authors, with the job and the mailer
+changed together six days ago. It refuses an app that already has a `.git`.
+Remove `apps/rails-8.0/.git` from the host when you are done. CI does this
+for rails-8.0 only. rails-7.2 and rails-6.0 stay without git, so they keep
+exercising the skip path and the `"unknown"` provenance the other smokes
+expect.
+
 For the isolated Puma watcher lifecycle test, including an installed `.gem`
 mode and persistent MCP reader, see [Managed watcher acceptance](docs/WATCHER_ACCEPTANCE.md).
 
@@ -281,6 +334,72 @@ differences are also retained: existing Canopy controllers can serialize
 action/chunk order differently across Ruby processes.
 Supplying a baseline runs an independent full/full control to identify that
 pre-existing limitation. Other unit families are not silently normalized.
+
+For the bounded verified-constant producer (#751), add
+`--verified-constant-spans` in either source or artifact mode. Both reports name
+the selected `reference_contract`: `verified_constant_spans` or the default
+`dependencies_only`, which remains usable with published Woods lacking span
+metadata. The default does not qualify spans or discard metadata during comparison;
+use the explicit flag for a producer that adds spans on target arrival.
+Span mode requires `metadata.references` even when it is `[]`; missing metadata
+is a failure, never capability detection. Records use `kind: "constant"`,
+`confidence: "verified"`, typed targets, 1-based published-source lines and
+0-based UTF-8 byte columns/lengths. Hand-labelled assertions cover caller edits,
+targeted removal, negative owners and PORO/concern transitions. Arrival changes
+only the expected dependency and span; deletion must restore the entire original
+caller payload, including source, timestamps, Git facts, chunks and other metadata.
+
+This mode cannot be combined with `--failure-only`, which skips mutations. Normal
+CI only syntax-checks this separate runner; it does not qualify these assertions.
+The focused oracle self-test is
+`ruby -I /path/to/woods/lib scripts/support/reference_snapshot_self_test.rb`.
+Qualification still requires full source and installed-artifact runs at pinned
+revisions/digest, including strict repeated-full comparison and failed-publication
+byte isolation. Verified constant spans do not complete #751 or method-target #756.
+
+For the bounded method-selector metadata slice of #756, use
+`--verified-constant-method-spans` instead. Its `reference_contract` is
+`verified_constant_method_spans`; the default and `--verified-constant-spans`
+contracts are unchanged. The flags are mutually exclusive, and method mode also
+requires the full mutation suite. This mode adds a separate synthetic public
+fixture with exact mixed seven/eight-key expectations derived from its source.
+Bare constants and argument constants have exactly the existing seven keys.
+A direct syntactic constant receiver adds only a `method` selector of 1–4,096
+UTF-8 bytes without control characters (punctuation/operators/Unicode are valid);
+its constant coordinates and typed target remain unchanged. `verified` describes
+registry resolution of the constant, including calls to nonexistent methods;
+it does not verify method existence or definition ownership. Chains retain the
+immediate selector (`new` in `ReferenceTarget.new.call`, `send` in
+`ReferenceTarget.send(:generate)`). Compound attribute/index writes retain their
+constant spans without a method annotation, as do unsupported selectors and
+multi-expression receiver groups. Attribute/index assignment targets in `rescue`
+and `for` slots (including nested destructuring) also omit `method`; nested calls
+in their receiver/index arguments keep independent selectors. Ordinary explicit
+setters stay annotated. Parenthesized receivers, `&.` and `::` calls
+retain their immediate selector; `.()` records `call`. Plain setters, index
+reads/writes and unary minus record `value=`, `[]`, `[]=` and `-@`, respectively.
+Nested argument/block calls retain their independent selectors; qualified
+constant occurrences retain their whole span. Existing dynamic-scope exclusions
+remain unchanged. A small public template expands deterministically into ASCII
+and Unicode selectors at 4,096 bytes and over that bound; only supported selectors
+get an eighth key. Malformed present cached selectors must reject the producer
+cache; producer cache-loader qualification awaits the exact reviewed snapshot.
+
+The selector-only caller mutation replaces `generate` with the same-length
+`dispatch`, checks unchanged constant spans and forward/reverse edges through the
+held MCP reader, and compares incremental output with a fresh full extraction.
+Normal source-edit timestamps, chunks and cache hashes can change; the separate
+metadata-only target-arrival/deletion gate still compares the entire caller
+payload exactly. Both strict and semantic snapshots retain all method metadata
+and unknown fields. Corruption self-tests cover missing/wrong/extra selectors,
+argument annotations, duplicate receivers, widened spans and same-length selector
+replacement, with no extra normalization. Run the focused oracle test above and
+`ruby scripts/tools/reference_runner_self_test.rb` for CLI refusal checks, and
+`ruby scripts/tools/reference_method_contract_self_test.rb` for selector bounds,
+encoding and control-character checks without a producer, Rails or Docker.
+These self-tests do not qualify a producer: full
+source and installed-artifact acceptance awaits an exact reviewed producer and
+its final selector bounds/edge contract.
 
 For five alternating baseline/candidate pairs of full extraction, a leaf edit
 and a shared-concern edit, add:
@@ -375,8 +494,18 @@ docker compose exec rails-7.2 bin/rails console
   fixtures used by `woods_credentials_smoke.rb` to exercise Console MCP
   redaction across real provider key shapes.
 - **`rails-6.0`:** a minimal `Post`/`Comment` app (controller, job, mailer,
-  routes) — **no** `User`/`Micropost`/`Relationship`/`Credential` models. See
+  routes) — **no** `Micropost`/`Relationship`/`Credential` models. It carries
+  the blog scenario below with a minimal `User` (author and subscriber). See
   `apps/rails-6.0/README.md`.
+- **`rails-8.0` / `rails-6.0`:** the blog scenario (woods-testbed#38): `Post`
+  with the `Taggable` concern, a slug set before save and an after_commit that
+  enqueues `NotifySubscribersJob` (no retry policy), `Tag`/`Tagging`, and
+  `MailingListMailer#new_post`, whose HTML template reads the unassigned
+  `@preferences` that Woods Map's passage flag must catch.
+- **`rails-8.0` / `rails-7.2` / `rails-6.0`:** the Woods Map engine
+  (lost-in-the/woods-map) mounted at `/woods`, bundled from
+  `WOODS_MAP_GEM_PATH` (default `../woods-map`) and checked by
+  `scripts/woods_map_smoke.rb` after `woods:extract`.
 - **`rails-8.0` / `rails-7.2` / `rails-6.0`:** an `app/services/domain/container/`
   wrapper-collision fixture (`Parser` and `Renderer`, both opening the same
   `Container` wrapper) for the woods G-1 identifier fix — each file must

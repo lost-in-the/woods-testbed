@@ -60,6 +60,7 @@ require 'stringio'
 require 'woods/extractor'
 require 'woods/filename_utils'
 require 'woods/generation'
+require_relative 'support/flow_document_inventory'
 
 PROBE_ACTION = 'smoke_probe_action'
 
@@ -126,9 +127,9 @@ def flow_index(output_dir)
   JSON.parse(path.read)
 end
 
-# Document basenames currently on disk in flows/, index excluded.
+# Document basenames currently on disk in flows/, both known indexes excluded.
 def flow_documents(output_dir)
-  Dir[flows_dir(output_dir).join('*.json')].map { |f| File.basename(f) }.sort - ['flow_index.json']
+  FlowDocumentInventory.documents(flows_dir(output_dir))
 end
 
 # flows/ documents nothing in flow_index.json references (the M3 sweep's
@@ -138,10 +139,10 @@ def orphaned_flow_documents(output_dir)
   flow_documents(output_dir) - referenced
 end
 
-# The COMPLETE flow document set as { relative_path => parsed content } —
+# The COMPLETE flow artifact set as { relative_path => parsed content } —
 # the full-vs-incremental equivalence oracle's second half. flow_index.json
-# itself is not a flow document. Two kinds of assembly-run nondeterminism
-# are normalized, and nothing else:
+# is compared separately; optional by_unit.json stays verbatim in this map.
+# Only documents normalize these two kinds of assembly-run nondeterminism:
 #
 #   1. the top-level `generated_at` FIELD (FlowDocument#initialize defaults
 #      it to Time.now.iso8601, so every assembly run rewrites it);
@@ -153,13 +154,7 @@ end
 #      different hex. The object id is stripped and the source location
 #      kept; the operation is otherwise compared verbatim.
 def flow_document_map(output_dir)
-  Dir[flows_dir(output_dir).join('*.json')]
-    .reject { |file| File.basename(file) == 'flow_index.json' }
-    .each_with_object({}) do |file, map|
-      content = JSON.parse(File.read(file))
-      content.delete('generated_at')
-      map["flows/#{File.basename(file)}"] = normalize_run_nondeterminism(content)
-    end
+  FlowDocumentInventory.artifact_map(flows_dir(output_dir)) { |content| normalize_run_nondeterminism(content) }
 end
 
 # Proc object addresses are the only per-process value inside the documents
@@ -544,7 +539,7 @@ begin
 
     full_documents = flow_document_map(output_dir)
 
-    results << assert('complete flow document set after the removal equals the full extraction\'s (no missing, no extra)') do
+    results << assert('complete flow artifact set after the removal equals the full extraction\'s (no missing, no extra)') do
       raise 'restored leg never produced a document snapshot' if post_incremental_documents.nil?
 
       missing = full_documents.keys - post_incremental_documents.keys
@@ -552,8 +547,8 @@ begin
       raise "missing from the incremental set: #{missing.inspect}; extra: #{extra.inspect}" unless missing.empty? && extra.empty?
     end
 
-    results << assert("every flow document's content is identical between the incremental and full runs " \
-                      '(modulo generated_at and Proc#inspect object ids — see flow_document_map)') do
+    results << assert('flow document and auxiliary index contents match between incremental and full runs ' \
+                      '(only documents normalize generated_at and Proc object ids — see flow_document_map)') do
       raise 'restored leg never produced a document snapshot' if post_incremental_documents.nil?
 
       drifted = full_documents.reject { |path, content| post_incremental_documents[path] == content }
