@@ -111,8 +111,13 @@ probes.each do |name, (method, path, empty, populated)|
   end
 end
 
+# The helper takes the gem's own connection path: Net::HTTP with the proxy
+# taken from the environment, the two-argument form the gem's Ollama and
+# Qdrant clients use. Loopback is exempt from an environment proxy in
+# net/http itself, so the synthetic listeners stay reachable here; a remote
+# host would go through the proxy, exactly as it does for the gem.
 %w[HTTP_PROXY http_proxy].each do |key|
-  check.call("#{key} bypassed by probes, count and DELETE with bounded direct transport") do
+  check.call("#{key} is honoured by probes, count and DELETE like the gem's clients, with bounded transport") do
     with_proxy_env(key) do
       with_http_constructor do |observations|
         with_response('{"models":[]}') { |url, _| raise 'probe failed' unless EmbedContractHTTP.ollama_available?(url) }
@@ -129,11 +134,12 @@ end
         end
         raise 'transport not shared' unless observations.size == 4
         observations.each do |args, http|
-          raise 'proxy not explicitly disabled' unless args.size == 3 && args.last.nil? && !http.proxy?
+          raise 'proxy not taken from the environment' unless args.size == 2 && http.proxy_from_env?
           raise 'unbounded connect/read timeouts' unless http.open_timeout == 2 && http.read_timeout == 4
           raise 'automatic retry enabled' unless http.max_retries.zero?
         end
       end
+      raise 'environment proxy ignored for a remote host' unless Net::HTTP.new('qdrant.invalid', 6333).proxy?
     end
   end
 end
