@@ -33,6 +33,22 @@
 #   bin/rails db:prepare
 #   bin/rails runner script/shared/tools/woods_bench.rb
 #
+#   Run db:prepare once, on a fresh database, before the bench and not between
+#   runs: it rewrites db/schema.rb, and on a copied database that already
+#   holds an earlier generation's gen_* tables it collides with the generated
+#   migrations and leaves a rewritten dump behind. The gem lists db/schema.rb
+#   among the paths whose change invalidates boot-captured state (the schema
+#   cache and column information a Rails process captures once), so
+#   `extract_changed` refuses such a path outright and only a full extraction
+#   in a fresh Rails process is an honest measurement. The bench decides that
+#   up front from the gem's own rule (Woods::InputRules) and measures such a
+#   scenario (schema) as a full extraction in a freshly booted `bin/rails
+#   runner` child (woods_bench_full_extraction.rb), timed inside the child so
+#   boot stays excluded. That sample is a repeat full extraction over the
+#   payload the cold row left behind, not a second cold run, and its RSS is
+#   the child's. The row and the JSON say so (`mode: full`). Restoring the
+#   edit needs a fresh process too, so each repetition boots twice.
+#
 #   WOODS_BENCH_REPS=7          repetitions per scenario (default 7; p95 of 7 is
 #                               the 7th value, so treat p95 as indicative below
 #                               ~20 reps and say so in the output)
@@ -64,6 +80,18 @@ CHANGE_DIR = APP.join('script/shared/tools/bench_changes')
 
 require 'woods'
 require 'woods/extractor'
+begin
+  require 'woods/input_rules'
+rescue LoadError
+  # Older gem without the shared fresh-process rule: fall back to its reload
+  # policy, and to no rule at all on a gem that predates both (such a gem
+  # refuses no path, so restart_sensitive? answers false there).
+  begin
+    require 'woods/reload_policy'
+  rescue LoadError
+    nil
+  end
+end
 
 require_relative '../support/woods_phase_logger'
 
@@ -147,24 +175,89 @@ def incremental_cycle(spec)
 
   before = current_manifest&.fetch('total_units', nil)
 
-  extractor = Woods::Extractor.new(output_dir: INDEX_DIR)
-  results, measurement = profile_extraction { extractor.extract_changed([path.to_s]) }
-
-  # extract_changed returns `touched.to_a` — a flat Array of unit identifiers,
-  # NOT a Hash keyed by type the way extract_all's result is. Treating it as a
-  # Hash silently reports 0 units written for every scenario, which is precisely
-  # the number finding 16 needs.
-  touched = Array(results).size
+  touched, mode, measurement = reextract(Woods::Extractor.new(output_dir: INDEX_DIR), spec[:path])
   after = current_manifest&.fetch('total_units', nil)
 
+  # A fresh-process sample carries the child's own RSS (nil if the child could
+  # not read it); this process never ran that extraction, so its RSS is not a
+  # substitute. Incremental samples carry this process's RSS.
   { ms: measurement[:wall_ms], phases_ms: measurement[:phases],
     profile_total_ms: measurement[:profile_total_ms], profile_lines: measurement[:profile_lines],
-    units_written: touched, index_before: before, index_after: after, rss_mb: rss_mb }
+    units_written: touched, index_before: before, index_after: after,
+    rss_mb: measurement.key?(:rss_mb) ? measurement[:rss_mb] : rss_mb, mode: mode }
 ensure
   if original
     path.write(original)
     Rails.application.reloader.reload!
-    Woods::Extractor.new(output_dir: INDEX_DIR).extract_changed([path.to_s])
+    reextract(Woods::Extractor.new(output_dir: INDEX_DIR), spec[:path])
+  end
+end
+
+# The gem refuses `extract_changed` over a path whose change invalidates
+# boot-captured state (db/schema.rb: the schema cache and column information
+# this process captured at boot), because only a fresh process can rebuild
+# that state. Decide that up front from the gem's own rule, never from the
+# wording of its refusal.
+#
+# @param relative_path [String] Rails.root-relative path the scenario edits
+# @return [Boolean]
+def restart_sensitive?(relative_path)
+  if defined?(Woods::InputRules)
+    Woods::InputRules.new.action(relative_path) == :full
+  elsif defined?(Woods::ReloadPolicy)
+    Woods::ReloadPolicy.new.classify(relative_path) == :restart
+  else
+    false # a gem with neither rule accepts every path incrementally
+  end
+end
+
+FULL_EXTRACTION_CHILD  = Pathname.new(__dir__).join('woods_bench_full_extraction.rb')
+FULL_EXTRACTION_MARKER = 'WOODS_BENCH_FULL_EXTRACTION '
+
+# A full extraction in a freshly booted Rails process, whose boot captures
+# the schema state the edit invalidated. Wall time, phases and RSS are the
+# child's own, measured around `extract_all` inside it; the spawn and the
+# boot are excluded, as Rails boot is for every other sample. The bootsnap
+# cache is left alone: these apps boot with eager_load off, so app files are
+# first loaded inside the child's timed `eager load` phase, and an emptied
+# cache would charge every compile to the measurement. The edited dump is
+# not loaded as code, and bootsnap keys its entries by mtime and size anyway.
+#
+# @return [Array(Integer, Hash)] units written and the child's measurement
+# @raise [RuntimeError] when the child exits non-zero or reports nothing
+def fresh_process_full_extraction
+  env = { 'WOODS_OUTPUT' => INDEX_DIR.to_s, 'WOODS_PROFILE' => '1' }
+  stdout, stderr, status = Open3.capture3(env, APP.join('bin/rails').to_s, 'runner',
+                                          FULL_EXTRACTION_CHILD.to_s, chdir: APP.to_s)
+  line = stdout.lines.reverse.find { |candidate| candidate.start_with?(FULL_EXTRACTION_MARKER) }
+  unless status.success? && line
+    raise "fresh-process full extraction failed (exit #{status.exitstatus.inspect}, no report line); " \
+          "stderr tail:\n#{stderr.lines.last(20).join}stdout tail:\n#{stdout.lines.last(5).join}"
+  end
+
+  report = JSON.parse(line.delete_prefix(FULL_EXTRACTION_MARKER))
+  [report.fetch('units_written'),
+   { wall_ms: report.fetch('wall_ms'), phases: report.fetch('phases_ms'),
+     profile_total_ms: report['profile_total_ms'], profile_lines: report.fetch('profile_lines'),
+     rss_mb: report['rss_mb'] }]
+end
+
+# Re-extract after the scenario's edit: incrementally in this process, or as
+# a full extraction in a fresh one when the edited path is boot-captured.
+#
+# @param extractor [Woods::Extractor]
+# @param relative_path [String] Rails.root-relative path the scenario edits
+# @return [Array(Integer, String, Hash)] units written, the mode run, the measurement
+def reextract(extractor, relative_path)
+  if restart_sensitive?(relative_path)
+    units, measurement = fresh_process_full_extraction
+    [units, 'full', measurement]
+  else
+    results, measurement = profile_extraction { extractor.extract_changed([APP.join(relative_path).to_s]) }
+    # extract_changed returns `touched.to_a`, a flat Array of unit identifiers
+    # (extract_all's per-type Hash is counted in the child instead). Treating
+    # the Array as a Hash silently reported 0 units written for every scenario.
+    [Array(results).size, 'incremental', measurement]
   end
 end
 
@@ -207,6 +300,7 @@ results = scenarios.map do |spec|
     'name' => spec[:name],
     'description' => spec[:description],
     'path' => spec[:path],
+    'mode' => samples.map { |s| s[:mode] }.uniq.join('+'),
     'reps' => REPS,
     'min_ms' => times.first,
     'p50_ms' => percentile(times, 0.5),
@@ -217,7 +311,7 @@ results = scenarios.map do |spec|
     'rss_mb_after' => samples.last[:rss_mb],
     'samples' => samples
   }
-  puts "p50 #{row['p50_ms']} ms  p95 #{row['p95_ms']} ms  wrote #{written} units (#{row['units_written_pct_of_index']}% of index)"
+  puts "p50 #{row['p50_ms']} ms  p95 #{row['p95_ms']} ms  wrote #{written} units (#{row['units_written_pct_of_index']}% of index)#{row['mode'] == 'incremental' ? '' : "  mode=#{row['mode']}"}"
   row
 end
 
@@ -241,7 +335,11 @@ payload = {
   'caveats' => [
     "p95 of #{REPS} samples is indicative, not a real tail — raise WOODS_BENCH_REPS for a meaningful one",
     'phase breakdown uses WOODS_PROFILE durations; legacy publish excludes nested sync but includes retention; unaccounted includes log rounding',
-    'extraction wall time excludes process/Rails boot and mutation/reload setup; single process, single container'
+    'extraction wall time excludes process/Rails boot and mutation/reload setup; single container',
+    'a scenario the gem refuses incrementally (db/schema.rb invalidates boot-captured schema state) is measured ' \
+    'as a repeat full extraction over the existing payload in a freshly booted bin/rails runner child, timed ' \
+    'inside the child, and carries mode=full with the child\'s rss_mb; restoring the edit boots a second child ' \
+    'per repetition'
   ]
 }
 
