@@ -235,6 +235,70 @@ for an unresolvable worktree git dir rather than a stale `GIT_BRANCH`/`GIT_SHA`.
 pattern-only mode without an embedding index (and that `WOODS_REQUIRE_INDEX=1`
 still fails closed).
 
+### Woods Map strict retained-range acceptance (#38)
+
+The opt-in [strict runner](scripts/woods_map_impact_smoke.rb) checks a real
+`woods:impact` saved report and captured Markdown against retained base/head
+payloads, then checks the mounted `/woods` range and typed template source pages
+through Rack, including the copied focus URL. Missing inputs, capabilities or
+artifacts fail; there are no successful skips. See the script header for its
+full contract.
+
+Prerequisites: a prepared app with Woods Map mounted at `/woods`, the required
+Woods/Map APIs loaded, and an already-published base in Map's configured index
+(`WoodsMap.configuration.index_path`). Each endpoint must have at most 5,000
+units; the roughly 10,000-unit Canopy preset is excluded. Use that **same
+retained index** for base, head and the saved report, with explicit
+`WOODS_OUTPUT`; do not run `woods:clean` between base and head.
+
+After publishing base, make a small controlled source edit to an existing
+`app/views/...` template present at both endpoints. Add/replace a line, or
+delete after a retained line, so the complete source diff has a visible anchor.
+Inside the prepared app container, from `/app`, replace every placeholder:
+
+```bash
+export WOODS_OUTPUT='<absolute Map index path>'
+export WOODS_MAP_IMPACT_TEMPLATE='app/views/<existing-template-path>'
+CHANGED_FILES="$WOODS_MAP_IMPACT_TEMPLATE" \
+  timeout --kill-after=5s 120s bin/rails woods:incremental
+
+export WOODS_MAP_IMPACT_FROM='gen:<retained-base-number>'
+export WOODS_MAP_IMPACT_TO='gen:<current-head-number>'
+export WOODS_MAP_IMPACT_MARKDOWN='<absolute path to new impact.md>'
+FORMAT=markdown timeout --kill-after=5s 120s bin/rails \
+  "woods:impact[$WOODS_MAP_IMPACT_FROM,$WOODS_MAP_IMPACT_TO]" \
+  > "$WOODS_MAP_IMPACT_MARKDOWN"
+export WOODS_MAP_IMPACT_REPORT_ID='<64-lowercase-hex-ID-printed-to-stderr>'
+timeout --kill-after=5s 120s bin/rails runner \
+  script/shared/woods_map_impact_smoke.rb
+```
+
+`CHANGED_FILES` is app-relative. Record the actual published generation numbers:
+`FROM` must be older than `TO`, and `TO` must remain Map's current head. Retain
+both payloads and freeze publication through report creation and the smoke.
+Keep trusted evidence of the real task invocation, index, endpoints, stderr
+report ID and stdout-only Markdown; hashes alone do not prove task origin.
+Keep the outer timeout around the whole Rails command, including boot, inside
+any container invocation; the runner's internal deadline starts after load.
+If needed, inherit `WOODS_MAP_TOKEN` from a private environment for bearer auth;
+never put it in URLs or captured artifacts.
+
+CI invokes the [119-case synthetic adapter self-test](scripts/tools/woods_map_impact_smoke_self_test.rb)
+under each variant's bundle. For a repo-root run with Nokogiri available to Ruby
+and an existing Woods checkout:
+
+```bash
+timeout --kill-after=5s 120s ruby scripts/tools/woods_map_impact_smoke_self_test.rb \
+  --woods /absolute/path/to/woods
+```
+
+The adapter uses real Woods report components with synthetic Rails/Map/Rack
+fixtures; it does not establish live retained-range acceptance. The strict
+runner is excluded from the general `scripts/*.rb` CI loop pending a dedicated
+lane that prepares its retained range. Live Rails 8.0/6.0/7.2 and bounded Canopy
+acceptance, large-app Map mount integration and MySQL Map acceptance remain
+open under #38.
+
 ### Woods Map click-only walks
 
 `scripts/support/woods_map_walks.json` writes the two Woods Map design-study
