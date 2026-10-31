@@ -37,5 +37,15 @@ x-ccr-env: &ccr-env
 
 services:
   rails-8.0-large:
+    # The image build needs the proxy too: apt and gem fetches in RUN steps
+    # resolve nothing on their own. http_proxy/https_proxy are Docker's
+    # predefined build args, so the Dockerfile needs no ARG for them.
+    build:
+      network: host
+      args:
+        http_proxy: ${HTTPS_PROXY:-}
+        https_proxy: ${HTTPS_PROXY:-}
+        HTTP_PROXY: ${HTTPS_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
     network_mode: host
     environment: *ccr-env
