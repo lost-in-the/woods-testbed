@@ -16,8 +16,13 @@
 #
 # Woods' flow assembler resolves the short name by suffix and steps into the
 # lib class; the reference scanner records no controller -> lib edge for it.
+# Ruby itself would not resolve that name from a top-level controller (the
+# action is never run), so this is a constructed disagreement between the
+# assembler and the graph, not a model of how the field case lost its edge.
 # Before woods#949 the incremental flow refresh walked only graph edges, so a
-# lib edit left the controller's flow carried forward with the old step lines.
+# lib edit left the controller's flow carried forward with the old step lines;
+# the smoke holds the fix's property that the refresh no longer depends on
+# the graph reaching every unit a flow steps into.
 #
 #   1. Full: `woods:extract` into index A. The controller's flow steps into
 #      the tracker. Whether the graph holds the edge is reported, not
