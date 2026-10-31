@@ -31,4 +31,13 @@ RSpec.describe Payouts::AccrueArticleEarning do
     publish_article
     expect(Payouts::Earning.last.payee).to eq(agency)
   end
+
+  it 'a payouts failure is reported without breaking publishing' do
+    allow_any_instance_of(Payouts::AccrueArticleEarning).to receive(:call).and_raise(ArgumentError, 'ledger unavailable')
+    expect(Rails.error).to receive(:report).with(an_instance_of(ArgumentError), hash_including(handled: true))
+    approve_article
+    expect(PublishArticleJob).to receive(:perform_later).with(@article.id)
+    expect { PublishArticle.new(author: @editor).call(@article) }.not_to raise_error
+    expect(@article.reload.state).to eq('published')
+  end
 end

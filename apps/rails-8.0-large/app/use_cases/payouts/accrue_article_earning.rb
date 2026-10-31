@@ -1,6 +1,6 @@
 module Payouts
   # Returns nil for authors without a payee (editors, unpaid staff) and for
-  # publications without a rate card, so publishing never depends on payouts.
+  # publications without a rate card.
   class AccrueArticleEarning
     def call(article)
       organization = article.publication.organization
