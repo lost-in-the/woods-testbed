@@ -59,7 +59,8 @@ Validated with Ruby 3.3.1, Rails 8.0, SQLite, and rootless Podman, against Woods
   approval` on this branch and on an `origin/main` baseline alike.
 - Woods drops a model whose polymorphic `belongs_to` declares `inverse_of`
   ("Polymorphic associations do not support computing the class"). Canopy
-  avoids that shape, so the gates stay meaningful.
+  avoids that shape, so the gates stay meaningful. Filed as woods#954; the
+  demodulized concern name is woods#955.
 - Smoke payout outcomes per organization: 4 statements each; settled bank,
   wallet, and international transfers (the international one on its second
   attempt), one rejected bank transfer, and one statement held below minimum.
