@@ -142,6 +142,7 @@ config/routes/payouts.rb, config/routes/syndication.rb
 - Publishing the same article twice accrues one earning.
 - An earning belongs to one statement at most; a second run for the same period builds nothing new.
 - A statement below `minimum_payout_cents` is held and its earnings roll into the next period.
+- Finalizing a run completes it immediately when no statements await transfer settlement; empty and all-held runs still record `finalized_at`.
 - A transfer is created once per statement and submitted once per idempotency key.
 - A failed first submission retries; a permanent rejection discards and marks the statement held.
 - An agency is paid for represented authors; that author has no separate payee in that organization.
