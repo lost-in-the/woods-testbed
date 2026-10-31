@@ -39,25 +39,27 @@ validation run; the updated GitHub Actions workflow has not been run remotely.
 ## Payouts and syndication: evidence from October 31, 2026
 
 Plan: [`plans/004-contributor-payouts-syndication.md`](plans/004-contributor-payouts-syndication.md).
-Validated with Ruby 3.3.1, Rails 8.0, SQLite, rootless Podman, and the local Woods
-checkout at `c8d1cc78` (204 commits behind its cached `origin/main`).
+Validated with Ruby 3.3.1, Rails 8.0, SQLite, and rootless Podman, against Woods
+`origin/main` at `556a91c7`. A local Woods checkout at `c8d1cc78` was also used.
 
-- **122 application examples passed**, up from 36: tenant plumbing, the earning
+- **133 application examples passed**, up from 36: tenant plumbing, the earning
   ledger, payout runs, held statements, transfer retry and rejection, agency
   payees, exclusive license conflicts, the partner API (v1 and v2), and the new
   pages and GraphQL field.
 - `woods:validate`, `zeitwerk:check`, and the incremental checker passed.
 - **Seeds:** smoke 1,041 rows (inside the existing 900 to 1,100 gate), demo
   47,567, stress 508,264 (489 seconds). Two fresh smoke seeds produce the same
-  fingerprint. Fresh smoke seeds match their manifest fingerprint;
-  the dataset check passed. Smoke report answers are unchanged.
+  fingerprint. The dataset check passed. Smoke report answers are unchanged.
 - **Kernel contract:** all 87 assertions hold, with 5 known gem issue hits, all
   from one new entry: models record an included lib concern by its demodulized
   name (`MoneyColumns`), while the concern unit is `Canopy::MoneyColumns`.
   `CurrentTenant` is recorded in all 17 controllers that include it.
-- **Functional contract:** 52 of 53 checks passed. The one failure, `Console
-  revision history keeps rejection and approval`, also fails on an `origin/main`
-  baseline with the same Woods checkout (37 of 38), so it predates this slice.
+- **Functional contract:** 53 of 53 checks passed on Woods `556a91c7`. The older
+  `c8d1cc78` checkout fails `Console revision history keeps rejection and
+  approval` on this branch and on an `origin/main` baseline alike.
+- Woods drops a model whose polymorphic `belongs_to` declares `inverse_of`
+  ("Polymorphic associations do not support computing the class"). Canopy
+  avoids that shape, so the gates stay meaningful.
 - Smoke payout outcomes per organization: 4 statements each; settled bank,
   wallet, and international transfers (the international one on its second
   attempt), one rejected bank transfer, and one statement held below minimum.
