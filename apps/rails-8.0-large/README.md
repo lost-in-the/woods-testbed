@@ -1,9 +1,9 @@
 # Canopy — Rails 8 functional and scale testbed
 
 Canopy is a fictional publishing business for testing Woods against connected
-Rails behavior and meaningful records. It has 29 domain tables, payment STI,
-editorial revisions/reviews, subscription billing, newsletters, support, and
-activity/webhook history. The smaller variants retain their compatibility role.
+Rails behavior and meaningful records. It has 41 domain tables, payment STI,
+editorial revisions/reviews, subscription billing, newsletters, support,
+activity/webhook history, contributor payouts, and syndication to partner outlets. The smaller variants retain their compatibility role.
 
 ## Start and explore
 
@@ -30,7 +30,20 @@ covers an existing database that `db:prepare` has already migrated.
    Some seeded readers opt out or simulate a bounce.
 4. **Support:** open a ticket from a subscriber, optionally link an invoice,
    add staff replies, assign an editor, and resolve it.
-5. **Overview:** inspect the review backlog, overdue totals, newsletter outcomes,
+5. **Payouts:** publishing a story accrues a fee for its author from the
+   publication's rate card. Under **Payouts**, add a payee (a person, or an agency
+   representing several authors), start the month's payout run, and finalize it.
+   Statements below the minimum are held; finalized ones get one transfer each.
+   Finalizing submits transfers in the background; `bin/rails testbed:drain`
+   submits any still pending or failed. One seeded payee times out once and then
+   settles, and one bank account is rejected.
+6. **Syndication:** under **Syndication**, add a partner outlet and license a
+   published story by territory and date window. Exclusive licenses cannot
+   overlap. Each license fee pays the author a share. Partners read licensed
+   stories through `GET /api/v1/licenses` or `/api/v2/licenses` with
+   `Authorization: Token token=<api_token>`, and report pickups with
+   `POST /api/v2/usage_reports`.
+7. **Overview:** inspect the review backlog, overdue totals, newsletter outcomes,
    activity history, and local webhook attempts. First webhook attempts fail;
    retries succeed. A delivered webhook is not delivered again.
 
@@ -47,15 +60,18 @@ with `bin/rails testbed:drain`; async queues are not durable across restarts.
 
 | Profile | Authors | Articles | Subscribers | Engagement events | Approximate total rows |
 |---|---:|---:|---:|---:|---:|
-| `smoke` | 12 | 30 | 60 | 120 | 940 |
-| `demo` | 80 | 600 | 2,000 | 25,000 | 46,000 |
+| `smoke` | 12 | 30 | 60 | 120 | 1,041 |
+| `demo` | 80 | 600 | 2,000 | 25,000 | 47,600 |
 | `stress` | 500 | 10,000 | 25,000 | 200,000 | 480,000 |
 
 The seed retains existing kernel records, so an upgraded database may have a
 few additional records. Every profile includes the same named scenarios:
 `canopy-story-0` was rejected then approved, `canopy-story-1` is scheduled,
 `CANOPY-OVERDUE` has 2,500 cents due, and `CANOPY-REFUND` has a 300-cent partial
-refund. The empty publication, anonymous threaded comment, archived discussion,
+refund. Payouts add an agency paid for two represented authors, a statement
+held below the minimum, a transfer that failed once then settled, and an
+exclusive worldwide license on `canopy-story-3`. The manifest names each one.
+The empty publication, anonymous threaded comment, archived discussion,
 canceled subscribers, nested preferences, Unicode text, and unassigned ticket
 provide useful boundary cases.
 
@@ -121,6 +137,13 @@ checks, then runs the shared smokes. Smaller variants skip the functional contra
   and `Newsletter::SendCampaign`.
 - How is a support ticket constrained to its subscriber? `Support::Ticket`.
 - How much of invoice `CANOPY-REFUND` was refunded? Console joins return 300 cents.
+- What stops a contributor statement from being paid twice?
+  `Payouts::SubmitTransfer` and the transfer's unique idempotency key.
+- Who gets paid for a story by an agency-represented author?
+  `Payouts::Payee.for_author`.
+- Which conflicting syndication licenses are refused? `Syndication::License`.
+- What happens when an article is published? `PublishArticle` instruments
+  `article.published`; `PayoutsListener` accrues the author's fee.
 - What happened between the two revisions of `canopy-story-0`? Console joins show
   `changes_requested`, then `approved`.
 

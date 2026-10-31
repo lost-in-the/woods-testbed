@@ -30,7 +30,7 @@ aren't installed on most dev machines.
 
 The **rails-8.0-large** variant is [Canopy](apps/rails-8.0-large/README.md), a
 working publishing testbed with editorial review, subscriptions, billing,
-newsletters, and support across 29 domain tables. Deterministic smoke/demo/stress
+newsletters, support, contributor payouts, and syndication across 41 domain tables. Deterministic smoke/demo/stress
 datasets exercise Console queries; an optional source generator independently
 scales extraction benchmarks. Its `Dockerfile` runs `db:prepare` at boot, as does
 the MySQL contract variant. Open http://localhost:3013 and choose a demo editor.

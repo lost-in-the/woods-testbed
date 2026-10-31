@@ -17,6 +17,18 @@ models:
     associations: [campaign, subscriber, engagement_events]
   Support::Ticket:
     associations: [subscriber, assignee, subject, messages]
+  Payouts::Payee:
+    associations: [organization, profile, earnings, statements]
+  Payouts::Earning:
+    associations: [payee, source, statement]
+    columns: [source_type, kind, amount_cents, earned_on]
+  Payouts::Statement:
+    associations: [payout_run, payee, earnings, transfer]
+  Payouts::Transfer:
+    associations: [statement]
+    columns: [type, state, idempotency_key, attempts]
+  Syndication::License:
+    associations: [partner, article, granted_by, usage_reports]
 units:
   - EditorialWorkflow
   - PublishArticle
@@ -31,6 +43,14 @@ units:
   - ArticlePolicy
   - ArticlesController
   - ArticleRevision
+  - Payouts::AccrueEarning
+  - Payouts::StartPayoutRun
+  - Payouts::SubmitTransfer
+  - Payouts::SubmitTransferJob
+  - Syndication::GrantLicense
+  - Syndication::RecordUsage
+  - Api::V2::LicensesController
+  - Payouts::StatementsController
 retrieval:
   - question: Where is approval of a particular article revision enforced?
     pattern: EditorialWorkflow
@@ -44,6 +64,12 @@ retrieval:
   - question: Where is ownership of support tickets validated?
     pattern: Support::Ticket$
     expected: Support::Ticket
+  - question: What stops a contributor statement from being paid twice?
+    pattern: SubmitTransfer$
+    expected: Payouts::SubmitTransfer
+  - question: Where are conflicting exclusive syndication licenses refused?
+    pattern: Syndication::License$
+    expected: Syndication::License
 # Independent answers for a fresh smoke fixture at its fixed reference time.
 smoke_reports:
   canopy: { review_backlog: 3, overdue_cents: 12100, newsletter: { bounced: 3, delivered: 32 } }
