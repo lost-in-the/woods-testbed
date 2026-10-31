@@ -91,6 +91,9 @@ and `curl` to a container needs `--noproxy '*'` or it is sent to the proxy.
 > Currently only `rails-8.0-large` carries the CA layer in its Dockerfile. The
 > other three variants still fail to build behind the proxy — see §1.5 of
 > [`docs/plans/002-large-app-variant.md`](docs/plans/002-large-app-variant.md).
+> Its build also needs the environment's network policy to allow
+> `deb.debian.org` (the `apt-get` layer); a 403 from the proxy on that host is
+> the policy, not the overlay.
 
 Image pulls through the proxy work normally — no extra configuration needed.
 
