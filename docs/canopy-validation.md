@@ -42,12 +42,14 @@ Plan: [`plans/004-contributor-payouts-syndication.md`](plans/004-contributor-pay
 Validated with Ruby 3.3.1, Rails 8.0, SQLite, rootless Podman, and the local Woods
 checkout at `c8d1cc78` (204 commits behind its cached `origin/main`).
 
-- **120 application examples passed**, up from 36: tenant plumbing, the earning
+- **122 application examples passed**, up from 36: tenant plumbing, the earning
   ledger, payout runs, held statements, transfer retry and rejection, agency
   payees, exclusive license conflicts, the partner API (v1 and v2), and the new
   pages and GraphQL field.
+- `woods:validate`, `zeitwerk:check`, and the incremental checker passed.
 - **Seeds:** smoke 1,041 rows (inside the existing 900 to 1,100 gate), demo
-  47,567, stress not yet re-measured. Fresh smoke seeds match their manifest fingerprint;
+  47,567, stress 508,264 (489 seconds). Two fresh smoke seeds produce the same
+  fingerprint. Fresh smoke seeds match their manifest fingerprint;
   the dataset check passed. Smoke report answers are unchanged.
 - **Kernel contract:** all 87 assertions hold, with 5 known gem issue hits, all
   from one new entry: models record an included lib concern by its demodulized

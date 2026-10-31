@@ -1,6 +1,8 @@
 # Plan: contributor payouts and syndication for Canopy
 
-Status: proposed. The number is a document sequence, not a GitHub issue reference.
+Status: implemented; see the October section of the [validation notes](../canopy-validation.md)
+for shipped behavior and measurements. The number is a document sequence, not a
+GitHub issue reference.
 
 ## Decision
 

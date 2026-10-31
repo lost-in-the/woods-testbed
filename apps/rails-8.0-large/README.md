@@ -62,7 +62,7 @@ with `bin/rails testbed:drain`; async queues are not durable across restarts.
 |---|---:|---:|---:|---:|---:|
 | `smoke` | 12 | 30 | 60 | 120 | 1,041 |
 | `demo` | 80 | 600 | 2,000 | 25,000 | 47,600 |
-| `stress` | 500 | 10,000 | 25,000 | 200,000 | 480,000 |
+| `stress` | 500 | 10,000 | 25,000 | 200,000 | 508,000 |
 
 The seed retains existing kernel records, so an upgraded database may have a
 few additional records. Every profile includes the same named scenarios:

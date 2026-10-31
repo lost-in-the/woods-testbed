@@ -13,8 +13,8 @@
 ## Global Constraints
 
 - All app paths below are relative to `apps/rails-8.0-large/`.
-- **Rails commands run in the container**, never on the host. Specs: `podman exec canopy-payouts-dev canopy-rspec <paths>`. The wrapper runs `db:prepare` against `/scratch/test.sqlite3` and writes `tmp/test_results.json`. Read that file for failures; do not re-run to see them.
-- Migrations: `podman exec canopy-payouts-dev bash -lc 'cd /app && DATABASE_URL=sqlite3:/scratch/development.sqlite3 bin/rails db:migrate'` regenerates `db/schema.rb`.
+- **Rails commands run in the container**, never on the host. Specs: `docker compose exec -e RAILS_ENV=test rails-8.0-large bin/rails db:prepare`, then `docker compose exec rails-8.0-large bundle exec rspec <paths> --format json --out tmp/test_results.json`. Read that file for failures; do not re-run to see them.
+- Migrations: `docker compose exec rails-8.0-large bin/rails db:migrate` regenerates `db/schema.rb`.
 - **Do not include `Archivable`, `Auditable`, or `RequiresAuthor` anywhere new.** The kernel contract asserts their includer counts exactly.
 - **Do not change existing smoke report answers** (`functional_contract.yml` `smoke_reports`).
 - Every new record validates that its parts belong to one organization, in the style of `Billing::Subscription` and `WebhookDelivery`.
@@ -63,7 +63,7 @@
   - `current_tenant_spec.rb`: after `Rails.application.eager_load!`, every subclass of `ActionController::Base` defined under `app/controllers` includes `CurrentTenant` (except `ApplicationController` itself); and a request that logs in as `@editor` and hits an action sees `Current.organization == @organization` (spy with `allow_any_instance_of(ArticlesController).to receive(:index).and_wrap_original`).
 - [ ] **Step 2: Run them; expect `NameError` for `Canopy::RoyaltyCalculator`, `Canopy::MoneyColumns`, `CurrentTenant`.**
 - [ ] **Step 3: Implement the files above.** Encryption keys: `ActiveRecord::Encryption.configure` (or `config.active_record.encryption.*`) from `ENV.fetch('CANOPY_ENCRYPTION_*')` with fixed, testbed-only defaults; a comment says never reuse them, like the compose tokens.
-- [ ] **Step 4: Run `canopy-rspec`; expect the full suite (36 old + new) to pass.**
+- [ ] **Step 4: Run the full suite; expect the full suite (36 old + new) to pass.**
 - [ ] **Step 5: Commit** `Add tenant plumbing, payout settings, and money helpers to Canopy`.
 
 ### Task 2: Schema, models, and the earning ledger writer
@@ -232,7 +232,7 @@ All foreign keys to namespaced tables need explicit `to_table:` (repo precedent 
 
 **Files:**
 - Modify: `lib/testbed/dataset.rb`, `scripts/tools/canopy_dataset_check.rb` (row bound), `functional_contract.yml`, `kernel_contract.yml`, `README.md` (variant), `docs/canopy-validation.md`, root `README.md` if it states table counts
-- Test: `canopy-rspec`; `bin/rails testbed:seed` on a fresh smoke DB; `script/shared/tools/canopy_dataset_check.rb`; `bin/rails woods:extract`; `script/shared/woods_contract_smoke.rb`; `script/shared/woods_functional_smoke.rb`
+- Test: full rspec suite; `bin/rails testbed:seed` on a fresh smoke DB; `script/shared/tools/canopy_dataset_check.rb`; `bin/rails woods:extract`; `script/shared/woods_contract_smoke.rb`; `script/shared/woods_functional_smoke.rb`
 
 - [ ] **Step 1:** In `build_organizations`, after authors: one individual payee per non-editor author except every 6th (agency-represented, two agencies, `CANOPY-AGENCY` names one); a per-word rate card per publication (4 cents, minimum 1500) and a flat card on the empty publication; payee for author with `account_last_four: '0000'` once (rejection), `simulate_timeout: '1'` once.
 - [ ] **Step 2:** Add `build_syndication` and `build_payouts` after `build_audience`. Syndication: two partners per organization with explicit `api_token`s, licenses for some published stories (`canopy-story-3` exclusive worldwide), one revoked, usage reports. Payouts: run for the reference month's previous month, finalize, call `Payouts::SubmitTransferJob.perform_now` explicitly (twice for the timeout payee). Scenario keys: `held_statement`, `agency_payee`, `exclusive_license`, `retried_transfer`.
