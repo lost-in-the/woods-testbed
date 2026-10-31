@@ -57,6 +57,15 @@ RSpec.describe 'Syndication workflows' do
     expect(Syndication::UsageReport.last).to have_attributes(pickups: 9, impressions: 250)
   end
 
+  it 'usage report timestamps follow the application clock' do
+    license = grant
+    row = { license_id: license.id, period_start: Date.new(2026, 10, 1), pickups: 3, impressions: 100 }
+    first = Time.zone.parse('2026-09-14T12:00:00Z')
+    travel_to(first) { Syndication::RecordUsage.new.call(partner: @partner, rows: [row]) }
+    travel_to(first + 1.day) { Syndication::RecordUsage.new.call(partner: @partner, rows: [row.merge(pickups: 4)]) }
+    expect(Syndication::UsageReport.last).to have_attributes(created_at: first, updated_at: first + 1.day, reported_at: first + 1.day)
+  end
+
   it 'usage for another partner\'s license is refused' do
     other = partner(name: 'Other Courier')
     license = grant(partner: other)

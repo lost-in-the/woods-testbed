@@ -12,8 +12,11 @@ module Syndication
       end
       records.each(&:validate!)
       return 0 if records.empty?
-      attributes = records.map { |r| r.slice(:license_id, :period_start, :pickups, :impressions, :reported_at) }
-      UsageReport.upsert_all(attributes, unique_by: [:license_id, :period_start])
+      # upsert_all would stamp rows with the database clock; pass the app clock
+      # so seeded and time-traveled rows stay reproducible.
+      attributes = records.map { |r| r.slice(:license_id, :period_start, :pickups, :impressions, :reported_at).merge(created_at: now, updated_at: now) }
+      UsageReport.upsert_all(attributes, unique_by: [:license_id, :period_start], record_timestamps: false,
+        update_only: %i[pickups impressions reported_at updated_at])
       records.size
     end
   end
