@@ -18,6 +18,7 @@ module Payouts
           transfer.last_error = e.message
           transfer.reject!
           close(transfer, status: :held, hold_reason: 'transfer_rejected')
+          transfer.statement.earnings.update_all(statement_id: nil)
         rescue FakeLedgerClient::TransientError => e
           transfer.last_error = e.message
           transfer.fail!

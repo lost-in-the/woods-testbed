@@ -62,4 +62,11 @@ RSpec.describe Payouts::StartPayoutRun do
     expect { start(author: @writer) }.to raise_error(Pundit::NotAuthorizedError)
     expect(Payouts::PayoutRun.count).to eq(0)
   end
+
+  it 'paused payees get no statement and keep their earnings' do
+    publish_with(flat_cents: 5000)
+    @payee.paused!
+    expect(start.statements).to be_empty
+    expect(Payouts::Earning.where(payee: @payee).unclaimed.count).to eq(1)
+  end
 end

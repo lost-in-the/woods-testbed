@@ -24,15 +24,17 @@ module Payouts
       minimum = Rails.configuration.payouts.fetch(:minimum_payout_cents)
       cutoff = run.period_start.next_month
       earnings = Earning.unclaimed.joins(:payee)
-        .where(payouts_payees: { organization_id: run.organization_id }).where('payouts_earnings.earned_on < ?', cutoff)
-      earnings.group_by(&:payee_id).each do |payee_id, rows|
-        total = rows.sum(&:amount_cents)
-        payee = rows.first.payee
+        .where(payouts_payees: { organization_id: run.organization_id, status: Payee.statuses.fetch('active') })
+        .where('payouts_earnings.earned_on < ?', cutoff)
+      totals = earnings.group(:payee_id).sum(:amount_cents)
+      payees = Payee.where(id: totals.keys).index_by(&:id)
+      totals.sort.each do |payee_id, total|
+        payee = payees.fetch(payee_id)
         if total < minimum
           run.statements.create!(payee: payee, status: :held, total_cents: total, currency: payee.currency, hold_reason: 'below_minimum')
         else
           statement = run.statements.create!(payee: payee, status: :draft, total_cents: total, currency: payee.currency)
-          Earning.where(id: rows.map(&:id)).update_all(statement_id: statement.id)
+          earnings.where(payee_id: payee_id).update_all(statement_id: statement.id)
         end
       end
     end

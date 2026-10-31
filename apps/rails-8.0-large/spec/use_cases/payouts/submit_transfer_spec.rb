@@ -54,4 +54,14 @@ RSpec.describe Payouts::SubmitTransfer do
     expect(run.reload.status).to eq('finalized')
     expect(other_statement.reload.status).to eq('finalized')
   end
+
+  it 'a rejected transfer releases its earnings to the next run' do
+    transfer = transfer_for(account_last_four: '0000')
+    described_class.new.call(transfer)
+    statement = transfer.statement.reload
+    expect(statement).to have_attributes(status: 'held', hold_reason: 'transfer_rejected')
+    expect(Payouts::Earning.where(payee: statement.payee).unclaimed.count).to eq(1)
+    next_run = Payouts::StartPayoutRun.new(author: @editor).call(organization: @organization, period_start: Date.current.next_month.beginning_of_month)
+    expect(next_run.statements.sole).to have_attributes(payee_id: statement.payee_id, status: 'draft', total_cents: 5000)
+  end
 end

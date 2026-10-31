@@ -50,4 +50,26 @@ RSpec.describe Payouts::FinalizePayoutRun do
     run = run_for
     expect { described_class.new(author: @writer).call(run) }.to raise_error(Pundit::NotAuthorizedError)
   end
+
+  it 'enqueues statement mail only after the whole run finalizes' do
+    individual_payee
+    publish_article
+    second = Author.create!(name: 'Second Writer', email: "second-#{SecureRandom.hex(4)}@example.test")
+    second.memberships.create!(organization: @organization, role: 'author')
+    Payouts::AccrueEarning.new.call(payee: individual_payee(second), source: @article, kind: :article_fee,
+      amount_cents: 5000, earned_on: Date.current, description: 'Co-author fee')
+    run = run_for
+    calls = 0
+    allow(Payouts::BankTransfer).to receive(:create!).and_wrap_original do |original, **attributes|
+      calls += 1
+      raise ActiveRecord::RecordInvalid, Payouts::BankTransfer.new if calls == 2
+      original.call(**attributes)
+    end
+    jobs_before = ActiveJob::Base.queue_adapter.enqueued_jobs.size
+    expect { finalize(run) }.to raise_error(ActiveRecord::RecordInvalid)
+    added = ActiveJob::Base.queue_adapter.enqueued_jobs.drop(jobs_before).map { |job| job[:job] }
+    expect(added).not_to include(ActionMailer::MailDeliveryJob)
+    expect(run.reload).to be_drafted
+    expect(run.statements.pluck(:status).uniq).to eq(['draft'])
+  end
 end

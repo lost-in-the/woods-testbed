@@ -8,15 +8,19 @@ module Payouts
 
     def call(run)
       raise Pundit::NotAuthorizedError unless @author&.editor_of?(run.organization)
+      finalized = []
       run.with_lock do
         return run unless run.drafted?
-        run.statements.draft.includes(:payee).find_each do |statement|
+        run.statements.draft.includes(payee: :profile).find_each do |statement|
           statement.update!(status: :finalized)
           create_transfer(statement)
-          ContributorMailer.statement_ready(statement).deliver_later
+          finalized << statement
         end
         run.update!(status: :finalized, finalized_at: Time.current)
       end
+      # Mail only once the run has committed, so a failure partway through
+      # never tells contributors about statements that rolled back.
+      finalized.each { |statement| ContributorMailer.statement_ready(statement).deliver_later }
       run
     end
 
