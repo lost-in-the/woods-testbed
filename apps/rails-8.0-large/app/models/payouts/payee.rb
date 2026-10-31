@@ -2,7 +2,7 @@ module Payouts
   class Payee < ApplicationRecord
     self.table_name = 'payouts_payees'
     belongs_to :organization
-    delegated_type :profile, types: %w[Payouts::IndividualProfile Payouts::AgencyProfile]
+    delegated_type :profile, types: %w[Payouts::IndividualProfile Payouts::AgencyProfile], inverse_of: :payee
     has_many :earnings, class_name: 'Payouts::Earning', dependent: :restrict_with_error
     has_many :statements, class_name: 'Payouts::Statement', dependent: :restrict_with_error
     enum :status, { active: 0, paused: 1 }

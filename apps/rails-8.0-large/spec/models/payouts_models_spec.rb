@@ -29,6 +29,12 @@ RSpec.describe 'Payouts models' do
     expect(profile.account_last_four).to eq('4321')
   end
 
+  it 'refuses nested representations before the agency has a payee' do
+    expect {
+      Payouts::AgencyProfile.create!(name: 'Early Agency', contact_email: 'desk@early.test', representations_attributes: [{ author_id: @writer.id }])
+    }.to raise_error(ActiveRecord::RecordInvalid, /payee/)
+  end
+
   it 'normalizes agency contact email' do
     profile = Payouts::AgencyProfile.create!(name: 'Desk', contact_email: ' Desk@Agency.TEST ')
     expect(profile.contact_email).to eq('desk@agency.test')
