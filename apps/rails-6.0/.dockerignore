@@ -1,0 +1,4 @@
+# The Dockerfile copies only the proxy CA bundle; the app is bind-mounted.
+# Ignoring the rest keeps root-owned tmp/ and log/ files out of the context.
+*
+!ca-bundle.crt
