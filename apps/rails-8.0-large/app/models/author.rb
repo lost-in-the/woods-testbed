@@ -15,6 +15,8 @@ class Author < ApplicationRecord
   end
   has_many :memberships, dependent: :destroy
   has_many :organizations, through: :memberships
+  has_many :individual_profiles, class_name: 'Payouts::IndividualProfile', dependent: :restrict_with_error
+  has_many :representations, class_name: 'Payouts::Representation', dependent: :destroy
   def editor_of?(organization)
     memberships.exists?(organization_id: organization.id, role: 'editor')
   end

@@ -1,5 +1,4 @@
-# A lib module that models include as a concern, the shape that once made
-# Woods publish one module as two units (woods#710).
+# Lives in lib/ but is included by models as a concern.
 module Canopy
   module MoneyColumns
     extend ActiveSupport::Concern
