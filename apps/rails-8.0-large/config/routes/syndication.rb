@@ -8,3 +8,10 @@ namespace :api, defaults: { format: :json } do
     resources :usage_reports, only: :create
   end
 end
+
+namespace :syndication do
+  resources :partners, only: %i[index show create]
+  resources :licenses, only: :create do
+    member { post :revoke }
+  end
+end
