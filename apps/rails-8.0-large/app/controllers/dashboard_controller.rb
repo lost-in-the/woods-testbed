@@ -1,4 +1,5 @@
 class DashboardController < ApplicationController
+  include CurrentTenant
   before_action :require_session
   def index
     @report = EditorialReport.new(current_organization)

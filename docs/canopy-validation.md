@@ -1,8 +1,8 @@
 # Canopy validation and operating notes
 
-Implemented in `apps/rails-8.0-large`: 29 domain tables, 31 ActiveRecord models,
-and 399 extracted units (198 framework source). These notes record local validation
-before the implementation commit. The smaller compatibility apps are unchanged.
+Implemented in `apps/rails-8.0-large`: 41 domain tables after the payouts and
+syndication slice (29 before it). The September section below records the
+original 29-table validation; the October section records the payouts slice. The smaller compatibility apps are unchanged.
 
 ## Evidence from September 14, 2026
 
@@ -35,6 +35,34 @@ validation run; the updated GitHub Actions workflow has not been run remotely.
 - README/Compose consistency, Compose configuration, Ruby syntax, and whitespace
   checks passed. Application tables were migrated successfully from the existing
   kernel database; a fresh test database also prepared successfully.
+
+## Payouts and syndication: evidence from October 31, 2026
+
+Plan: [`plans/004-contributor-payouts-syndication.md`](plans/004-contributor-payouts-syndication.md).
+Validated with Ruby 3.3.1, Rails 8.0, SQLite, and rootless Podman, against Woods
+`origin/main` at `556a91c7`. A local Woods checkout at `c8d1cc78` was also used.
+
+- **133 application examples passed**, up from 36: tenant plumbing, the earning
+  ledger, payout runs, held statements, transfer retry and rejection, agency
+  payees, exclusive license conflicts, the partner API (v1 and v2), and the new
+  pages and GraphQL field.
+- `woods:validate`, `zeitwerk:check`, and the incremental checker passed.
+- **Seeds:** smoke 1,041 rows (inside the existing 900 to 1,100 gate), demo
+  47,567, stress 508,264 (489 seconds). Two fresh smoke seeds produce the same
+  fingerprint. The dataset check passed. Smoke report answers are unchanged.
+- **Kernel contract:** all 87 assertions hold, with 5 known gem issue hits, all
+  from one new entry: models record an included lib concern by its demodulized
+  name (`MoneyColumns`), while the concern unit is `Canopy::MoneyColumns`.
+  `CurrentTenant` is recorded in all 17 controllers that include it.
+- **Functional contract:** 53 of 53 checks passed on Woods `556a91c7`. The older
+  `c8d1cc78` checkout fails `Console revision history keeps rejection and
+  approval` on this branch and on an `origin/main` baseline alike.
+- Woods drops a model whose polymorphic `belongs_to` declares `inverse_of`
+  ("Polymorphic associations do not support computing the class"). Canopy
+  avoids that shape, so the gates stay meaningful.
+- Smoke payout outcomes per organization: 4 statements each; settled bank,
+  wallet, and international transfers (the international one on its second
+  attempt), one rejected bank transfer, and one statement held below minimum.
 
 ## Dataset and query measurements
 
@@ -132,11 +160,31 @@ erDiagram
   Organization ||--o{ WebhookEndpoint : configures
   ActivityEvent ||--o{ WebhookDelivery : triggers
   WebhookEndpoint ||--o{ WebhookDelivery : receives
+  Organization ||--o{ Payee : pays
+  Payee ||--|| IndividualProfile : "delegated profile"
+  Payee ||--|| AgencyProfile : "delegated profile"
+  AgencyProfile ||--o{ Representation : represents
+  Author ||--o{ Representation : represented_by
+  Publication ||--o{ RateCard : prices
+  Payee ||--o{ Earning : accrues
+  Article ||--o{ Earning : earns
+  License ||--o{ Earning : shares
+  Organization ||--o{ PayoutRun : runs
+  PayoutRun ||--o{ Statement : builds
+  Statement ||--o{ Earning : settles
+  Statement ||--o| Transfer : paid_by
+  Organization ||--o{ Partner : licenses_to
+  Partner ||--o{ License : holds
+  Article ||--o{ License : licensed_as
+  License ||--o{ UsageReport : reports
 ```
 
 `ActivityEvent#subject` is polymorphic across Article, Subscription, and Ticket;
 Ticket can reference an Invoice or Subscription. Payment retains card/bank STI.
-Those shapes are also asserted against extracted metadata.
+Those shapes are also asserted against extracted metadata. Payee uses
+`delegated_type` for its profile; Earning#source is polymorphic across Article
+and License; Transfer is STI with a grandchild
+(`InternationalBankTransfer < BankTransfer < Transfer`).
 
 ## Deliberate limits and proposal adjustments
 

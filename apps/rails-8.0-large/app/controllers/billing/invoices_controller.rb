@@ -1,5 +1,6 @@
 module Billing
   class InvoicesController < ApplicationController
+    include CurrentTenant
     include RequiresAuthor
     before_action :require_session
     before_action :require_editor
