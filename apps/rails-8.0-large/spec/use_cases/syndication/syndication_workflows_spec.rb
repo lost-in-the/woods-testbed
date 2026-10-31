@@ -80,4 +80,11 @@ RSpec.describe 'Syndication workflows' do
     Syndication::ImportUsageReportJob.perform_now(@partner.id, [row])
     expect(Syndication::UsageReport.last).to have_attributes(license_id: license.id, pickups: 2, impressions: 5)
   end
+
+  it 'usage reports group any date into its month' do
+    license = grant
+    Syndication::RecordUsage.new.call(partner: @partner, rows: [{ license_id: license.id, period_start: '2026-10-15', pickups: 1, impressions: 1 }])
+    Syndication::RecordUsage.new.call(partner: @partner, rows: [{ license_id: license.id, period_start: '2026-10-01', pickups: 2, impressions: 2 }])
+    expect(Syndication::UsageReport.sole).to have_attributes(period_start: Date.new(2026, 10, 1), pickups: 2)
+  end
 end

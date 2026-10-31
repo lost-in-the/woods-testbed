@@ -7,7 +7,7 @@ module Syndication
       raise ActiveRecord::RecordNotFound, "License not found: #{(ids - owned).join(', ')}" unless (ids - owned).empty?
       now = Time.current
       records = rows.map do |row|
-        UsageReport.new(license_id: row[:license_id].to_i, period_start: row[:period_start],
+        UsageReport.new(license_id: row[:license_id].to_i, period_start: row[:period_start].to_date&.beginning_of_month,
           pickups: row[:pickups].to_i, impressions: row[:impressions].to_i, reported_at: now)
       end
       records.each(&:validate!)

@@ -91,4 +91,14 @@ RSpec.describe 'Partner API', type: :request do
     get '/api/v1/licenses', headers: headers
     expect(seen).to eq([@organization, @partner, nil])
   end
+
+  it 'v2 usage post refuses unknown and revoked license ids without enqueueing' do
+    revoked = license_for(@article, @partner, territory: 'CA')
+    revoked.update!(revoked_at: Time.current)
+    [revoked.id, 999_999].each do |license_id|
+      post '/api/v2/usage_reports', params: { reports: [{ license_id: license_id, period_start: '2026-10-01', pickups: 1, impressions: 1 }] }, headers: headers, as: :json
+      expect(response).to have_http_status(:not_found)
+    end
+    expect(Syndication::ImportUsageReportJob).not_to have_been_enqueued
+  end
 end

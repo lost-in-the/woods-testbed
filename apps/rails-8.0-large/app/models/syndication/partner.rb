@@ -2,7 +2,9 @@ module Syndication
   class Partner < ApplicationRecord
     self.table_name = 'syndication_partners'
     belongs_to :organization
-    has_many :licenses, class_name: 'Syndication::License', dependent: :restrict_with_error
+    has_many :licenses, class_name: 'Syndication::License'
+    # Revoked licenses still hold foreign keys, so the restrict check must see them.
+    has_many :all_licenses, -> { unscope(where: :revoked_at) }, class_name: 'Syndication::License', dependent: :restrict_with_error
     has_secure_token :api_token
     encrypts :webhook_secret, deterministic: true
     normalizes :contact_email, with: ->(email) { email.strip.downcase }

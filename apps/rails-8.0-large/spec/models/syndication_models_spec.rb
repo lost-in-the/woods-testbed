@@ -50,4 +50,11 @@ RSpec.describe 'Syndication models' do
   it 'generates a partner API token' do
     expect(@partner.api_token).to be_present
   end
+
+  it 'refuses destroying an article or partner that has only revoked licenses' do
+    license_for(@article, @partner).update!(revoked_at: Time.current)
+    expect(@article.destroy).to be(false)
+    expect(@article.errors.full_messages.join).to match(/licenses/i)
+    expect(@partner.destroy).to be(false)
+  end
 end
