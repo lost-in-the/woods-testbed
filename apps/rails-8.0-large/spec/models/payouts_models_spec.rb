@@ -76,4 +76,34 @@ RSpec.describe 'Payouts models' do
   it 'requires payout runs to start on the first of a month' do
     expect(Payouts::PayoutRun.new(organization: @organization, period_start: Date.new(2026, 8, 2), started_by: @editor)).not_to be_valid
   end
+
+  def second_writer
+    Author.create!(name: 'Second Writer', email: "second-#{SecureRandom.hex(4)}@example.test").tap do |author|
+      author.memberships.create!(organization: @organization, role: 'author')
+    end
+  end
+
+  it 'requires destination details that match the payout method' do
+    profile = Payouts::IndividualProfile.create!(author: @writer, legal_name: 'Writer', bank_details: { 'account_last_four' => '4321' })
+    payee = Payouts::Payee.new(organization: @organization, profile: profile, display_name: 'Writer', payout_method: 'wallet')
+    expect(payee).not_to be_valid
+    expect(payee.errors[:payout_method].join).to match(/wallet_handle/)
+    agency = Payouts::AgencyProfile.create!(name: 'Desk', contact_email: 'desk@desk.test')
+    expect(Payouts::Payee.new(organization: @organization, profile: agency, display_name: 'Desk', payout_method: 'wallet')).not_to be_valid
+  end
+
+  it 'allows one individual payee per author in an organization' do
+    individual_payee(@writer)
+    expect { individual_payee(@writer) }.to raise_error(ActiveRecord::RecordInvalid, /already has a payee/)
+  end
+
+  it 'refuses a second agency for the same author in one organization' do
+    agency_payee(@writer)
+    expect { agency_payee(@writer, name: 'Second Agency') }.to raise_error(ActiveRecord::RecordInvalid, /another agency/)
+  end
+
+  it 'refuses an individual payee for an author outside the organization' do
+    outsider = Author.create!(name: 'Outsider', email: "outsider-#{SecureRandom.hex(4)}@example.test")
+    expect { individual_payee(outsider) }.to raise_error(ActiveRecord::RecordInvalid, /member/)
+  end
 end

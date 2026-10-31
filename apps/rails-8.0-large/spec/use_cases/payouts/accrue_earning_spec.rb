@@ -24,7 +24,7 @@ RSpec.describe Payouts::AccrueEarning do
 
   it 'refuses a source from another organization' do
     other = Organization.create!(name: 'Other', slug: "other-#{SecureRandom.hex(3)}")
-    @payee.update!(organization: other)
+    @payee.update_column(:organization_id, other.id)
     expect { accrue }.to raise_error(ArgumentError, 'Source belongs to another organization')
   end
 end
