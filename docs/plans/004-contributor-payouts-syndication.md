@@ -90,7 +90,7 @@ results. Each one lands here as code a real team would write.
 | A controller calling a lib class inside an `if` branch | `Payouts::StatementsController#show` calls `Canopy::RoyaltyCalculator.new(...).breakdown` only when a preview is requested |
 | STI grandchild | `InternationalBankTransfer < BankTransfer < Transfer` |
 | Restart inputs | `config/payouts.yml` read with `config_for`, plus Active Record encryption keys in an initializer |
-| Many jobs and serializers | 6 new jobs, 4 new serializers, partner API v1 and v2 |
+| Many jobs and serializers | 4 new jobs, 4 new serializers, partner API v1 and v2 |
 | Event subscriber with real work | `PayoutsListener` subscribes to `article.published` and accrues the earning. Wired in `config/initializers/event_listeners.rb`. (`ArticleListener.subscribe!` is never called today; left as is.) |
 
 ## Rails patterns this adds
