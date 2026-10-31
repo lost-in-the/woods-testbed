@@ -1,4 +1,5 @@
 class ArticlesController < ApplicationController
+  include CurrentTenant
   include RequiresAuthor
   before_action :require_session
   before_action :load_article, only: %i[show edit update submit decide publish schedule]

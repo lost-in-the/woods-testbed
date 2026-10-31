@@ -21,6 +21,7 @@ module RailsEightLarge
     config.api_only = false
 
     config.autoload_lib(ignore: %w[tasks]) if config.respond_to?(:autoload_lib)
+    config.payouts = config_for(:payouts)
 
     # ── The generated tree (scripts/generate_large_app.rb) ────────────────
     #

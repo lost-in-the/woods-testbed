@@ -1,4 +1,5 @@
 class DemoSessionsController < ApplicationController
+  include CurrentTenant
   before_action :demo_only
   def show
     @authors = Author.joins(:memberships).distinct.order(:name)
