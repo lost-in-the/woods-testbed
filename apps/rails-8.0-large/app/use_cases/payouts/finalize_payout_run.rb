@@ -16,7 +16,10 @@ module Payouts
           create_transfer(statement)
           finalized << statement
         end
-        run.update!(status: :finalized, finalized_at: Time.current)
+        # Held statements need no transfer; only finalized statements keep
+        # the run open, matching SubmitTransfer's completion rule.
+        status = run.statements.finalized.exists? ? :finalized : :completed
+        run.update!(status: status, finalized_at: Time.current)
       end
       # Mail only once the run has committed, so a failure partway through
       # never tells contributors about statements that rolled back.
