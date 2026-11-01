@@ -223,7 +223,7 @@ known_gem_issues:
       "MoneyColumns" while the concern unit is "Canopy::MoneyColumns". The
       source is inlined; only the recorded name loses its namespace, and two
       same-named concerns in different namespaces would be indistinguishable.
-    ref: unfiled
+    ref: woods#955
   - matches: "service Billing::IssueInvoice"
     reason: >-
       ServiceExtractor names the unit from the innermost class name, so
