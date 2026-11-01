@@ -3,8 +3,13 @@
 require 'json'
 require 'net/http'
 
-# Out-of-band checks for the embed smoke. Never let an environment proxy
-# impersonate a backend or leave a count/cleanup request waiting indefinitely.
+# Out-of-band checks for the embed smoke. They take the same proxy path as
+# the gem's own Ollama and Qdrant clients (Net::HTTP with the environment's
+# proxy settings, if any), so a probe and the gem share one route to the
+# service instead of the probe going direct while the gem goes through a
+# proxy. The response checks reject an intermediary's answer (a proxy's own
+# page is not a service object with the expected keys), and no count or
+# cleanup request waits indefinitely.
 module EmbedContractHTTP
   class InvalidResponse < StandardError; end
 
@@ -12,7 +17,7 @@ module EmbedContractHTTP
 
   def request(url, path, method: :get, open_timeout: 2, read_timeout: 4)
     uri = URI("#{url}#{path}")
-    http = Net::HTTP.new(uri.hostname, uri.port, nil)
+    http = Net::HTTP.new(uri.hostname, uri.port)
     http.use_ssl = uri.scheme == 'https'
     http.open_timeout = open_timeout
     http.read_timeout = read_timeout

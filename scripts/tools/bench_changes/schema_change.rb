@@ -5,11 +5,12 @@
 # The second fan-out scenario, and a different *kind* of fan-out from routes:
 # ReloadPolicy classifies db/schema.rb as :restart, not :reload, because the
 # schema cache is boot-captured and Rails' reloader does not rebuild it. So for
-# the daemon this is the escalation path, and for a plain incremental run it
-# touches every model whose table changed.
+# the daemon this is the escalation path, and `extract_changed` refuses the
+# path outright.
 #
-# Measured here for its incremental cost; the daemon's restart behaviour is
-# rung 13's business.
+# Measured by the bench as a repeat full extraction in a freshly booted child
+# process (mode: full), which is the only honest cost of such an edit; the
+# daemon's restart behaviour is rung 13's business.
 {
   name: 'schema',
   description: 'edit schema.rb without migrating the live database (invalidation probe)',

@@ -13,12 +13,13 @@ namespace :testbed do
     FileUtils.rm_f(Testbed::Dataset.manifest_path)
     Rake::Task['testbed:seed'].invoke
   end
-  desc 'Run due publishing/renewal jobs and finish queued local deliveries'
+  desc 'Run due publishing/renewal jobs, finish queued local deliveries, and submit open transfers'
   task drain: :environment do
     PublishDueArticlesJob.perform_now
     RenewSubscriptionsJob.perform_now
     Newsletter::Delivery.where(state: 'queued').find_each { |d| Newsletter::DeliverJob.perform_now(d.id) }
     WebhookDelivery.where.not(state: 'delivered').find_each { |d| WebhookDeliveryJob.perform_now(d.id) }
+    Payouts::Transfer.where(state: %w[pending failed]).find_each { |t| Payouts::SubmitTransferJob.perform_now(t.id) }
   end
   desc 'Print deterministic report answers at the dataset reference time'
   task report: :environment do

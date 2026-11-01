@@ -11,7 +11,7 @@
 <body>
 <header><strong>Canopy</strong> <span> / Publishing desk</span>
   <nav><%= link_to 'Overview', root_path %><%= link_to 'Editorial', articles_path %>
-  <% if editor? %><%= link_to 'Collections', collections_path %><%= link_to 'Subscribers', subscribers_path %><%= link_to 'Invoices', billing_invoices_path %><%= link_to 'Newsletters', newsletter_campaigns_path %><%= link_to 'Support', support_tickets_path %><% end %>
+  <% if editor? %><%= link_to 'Collections', collections_path %><%= link_to 'Subscribers', subscribers_path %><%= link_to 'Invoices', billing_invoices_path %><%= link_to 'Newsletters', newsletter_campaigns_path %><%= link_to 'Support', support_tickets_path %><%= link_to 'Payouts', payouts_payout_runs_path %><%= link_to 'Syndication', syndication_partners_path %><% end %>
   <%= link_to(current_author ? "Switch identity (#{current_author.name})" : 'Enter demo', demo_session_path) %></nav>
 </header>
 <main>

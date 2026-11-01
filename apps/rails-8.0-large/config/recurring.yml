@@ -6,3 +6,9 @@ production:
   renew_subscriptions:
     class: RenewSubscriptionsJob
     schedule: "0 * * * *"
+  monthly_payout_run:
+    class: Payouts::MonthlyPayoutRunJob
+    schedule: "0 6 1 * *"
+  reconcile_transfers:
+    class: Payouts::ReconcileTransfersJob
+    schedule: "15 * * * *"

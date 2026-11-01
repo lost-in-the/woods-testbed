@@ -1,0 +1,2 @@
+<p>Hello <%= @payee.display_name %>,</p>
+<p>Your statement for <%= @statement.payout_run.period_start.strftime('%B %Y') %> totals <%= @statement.total_display %>.</p>

@@ -1,0 +1,5 @@
+# Contributor payout rules. Read once at boot through config_for(:payouts).
+shared:
+  minimum_payout_cents: 2500
+  syndication_author_share_bps: 5000
+  transfer_retry_attempts: 3

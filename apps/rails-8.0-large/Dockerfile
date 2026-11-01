@@ -7,6 +7,18 @@ ENV LANG=C.UTF-8 \
     BUNDLE_WITHOUT="production" \
     PATH=/bundle/bin:/app/bin:$PATH
 
+# Optional: trust an intercepting egress CA. bin/ccr_compose.sh stages a real
+# bundle here when the session sits behind one; on a laptop the file is empty
+# and this layer is a no-op. Must run before any gem/apt fetch over HTTPS, so it
+# precedes the apt layer
+# (the base image already ships ca-certificates).
+COPY ca-bundle.crt /usr/local/share/ca-certificates/ccr-agent-proxy.crt
+RUN if [ -s /usr/local/share/ca-certificates/ccr-agent-proxy.crt ]; then \
+      update-ca-certificates; \
+    else \
+      rm -f /usr/local/share/ca-certificates/ccr-agent-proxy.crt; \
+    fi
+
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
       build-essential \
       git \
@@ -16,16 +28,6 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# Optional: trust an intercepting egress CA. bin/ccr_compose.sh stages a real
-# bundle here when the session sits behind one; on a laptop the file is empty
-# and this layer is a no-op. Must run before any gem/apt fetch over HTTPS.
-COPY ca-bundle.crt /usr/local/share/ca-certificates/ccr-agent-proxy.crt
-RUN if [ -s /usr/local/share/ca-certificates/ccr-agent-proxy.crt ]; then \
-      update-ca-certificates; \
-    else \
-      rm -f /usr/local/share/ca-certificates/ccr-agent-proxy.crt; \
-    fi
 
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     BUNDLE_SSL_CA_CERT=/etc/ssl/certs/ca-certificates.crt

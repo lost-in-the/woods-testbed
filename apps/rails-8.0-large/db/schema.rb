@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_09_14_000002) do
+ActiveRecord::Schema[8.0].define(version: 2026_10_31_000001) do
   create_table "activity_events", force: :cascade do |t|
     t.integer "organization_id", null: false
     t.integer "actor_id"
@@ -263,6 +263,121 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_14_000002) do
     t.index ["slug"], name: "index_organizations_on_slug", unique: true
   end
 
+  create_table "payouts_agency_profiles", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "contact_email", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "payouts_earnings", force: :cascade do |t|
+    t.integer "payee_id", null: false
+    t.string "source_type", null: false
+    t.integer "source_id", null: false
+    t.integer "kind", null: false
+    t.integer "amount_cents", null: false
+    t.string "currency", default: "USD", null: false
+    t.date "earned_on", null: false
+    t.integer "statement_id"
+    t.string "description", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["payee_id", "source_type", "source_id", "kind"], name: "index_payouts_earnings_on_source_identity", unique: true
+    t.index ["payee_id"], name: "index_payouts_earnings_on_payee_id"
+    t.index ["statement_id"], name: "index_payouts_earnings_on_statement_id"
+  end
+
+  create_table "payouts_individual_profiles", force: :cascade do |t|
+    t.integer "author_id", null: false
+    t.string "legal_name", null: false
+    t.string "tax_id"
+    t.json "bank_details", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id"], name: "index_payouts_individual_profiles_on_author_id"
+  end
+
+  create_table "payouts_payees", force: :cascade do |t|
+    t.integer "organization_id", null: false
+    t.string "profile_type", null: false
+    t.integer "profile_id", null: false
+    t.string "display_name", null: false
+    t.integer "status", default: 0, null: false
+    t.string "payout_method", default: "bank", null: false
+    t.string "country_code", default: "US", null: false
+    t.string "currency", default: "USD", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["organization_id"], name: "index_payouts_payees_on_organization_id"
+    t.index ["profile_type", "profile_id"], name: "index_payouts_payees_on_profile_type_and_profile_id", unique: true
+  end
+
+  create_table "payouts_payout_runs", force: :cascade do |t|
+    t.integer "organization_id", null: false
+    t.date "period_start", null: false
+    t.integer "status", default: 0, null: false
+    t.integer "statements_count", default: 0, null: false
+    t.integer "started_by_id", null: false
+    t.datetime "finalized_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["organization_id", "period_start"], name: "index_payouts_payout_runs_on_organization_id_and_period_start", unique: true
+    t.index ["organization_id"], name: "index_payouts_payout_runs_on_organization_id"
+    t.index ["started_by_id"], name: "index_payouts_payout_runs_on_started_by_id"
+  end
+
+  create_table "payouts_rate_cards", force: :cascade do |t|
+    t.integer "publication_id", null: false
+    t.integer "basis", null: false
+    t.json "terms", default: {}, null: false
+    t.date "effective_on", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["publication_id", "effective_on"], name: "index_payouts_rate_cards_on_publication_id_and_effective_on", unique: true
+    t.index ["publication_id"], name: "index_payouts_rate_cards_on_publication_id"
+  end
+
+  create_table "payouts_representations", force: :cascade do |t|
+    t.integer "agency_profile_id", null: false
+    t.integer "author_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["agency_profile_id", "author_id"], name: "idx_on_agency_profile_id_author_id_1270a0dc55", unique: true
+    t.index ["agency_profile_id"], name: "index_payouts_representations_on_agency_profile_id"
+    t.index ["author_id"], name: "index_payouts_representations_on_author_id"
+  end
+
+  create_table "payouts_statements", force: :cascade do |t|
+    t.integer "payout_run_id", null: false
+    t.integer "payee_id", null: false
+    t.integer "status", default: 0, null: false
+    t.integer "total_cents", default: 0, null: false
+    t.string "currency", default: "USD", null: false
+    t.string "hold_reason"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["payee_id"], name: "index_payouts_statements_on_payee_id"
+    t.index ["payout_run_id", "payee_id"], name: "index_payouts_statements_on_payout_run_id_and_payee_id", unique: true
+    t.index ["payout_run_id"], name: "index_payouts_statements_on_payout_run_id"
+  end
+
+  create_table "payouts_transfers", force: :cascade do |t|
+    t.string "type", null: false
+    t.integer "statement_id", null: false
+    t.string "state", null: false
+    t.integer "amount_cents", null: false
+    t.string "currency", default: "USD", null: false
+    t.string "idempotency_key", null: false
+    t.integer "attempts", default: 0, null: false
+    t.string "provider_reference"
+    t.string "last_error"
+    t.json "destination", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["idempotency_key"], name: "index_payouts_transfers_on_idempotency_key", unique: true
+    t.index ["statement_id"], name: "index_payouts_transfers_on_statement_id", unique: true
+  end
+
   create_table "publications", force: :cascade do |t|
     t.integer "organization_id", null: false
     t.string "name", null: false
@@ -329,6 +444,50 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_14_000002) do
     t.index ["subscriber_id"], name: "index_support_tickets_on_subscriber_id"
   end
 
+  create_table "syndication_licenses", force: :cascade do |t|
+    t.integer "partner_id", null: false
+    t.integer "article_id", null: false
+    t.integer "granted_by_id", null: false
+    t.string "territory", null: false
+    t.date "starts_on", null: false
+    t.date "ends_on", null: false
+    t.boolean "exclusive", default: false, null: false
+    t.integer "fee_cents", null: false
+    t.string "currency", default: "USD", null: false
+    t.datetime "revoked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["article_id", "territory"], name: "index_syndication_licenses_on_article_id_and_territory"
+    t.index ["article_id"], name: "index_syndication_licenses_on_article_id"
+    t.index ["granted_by_id"], name: "index_syndication_licenses_on_granted_by_id"
+    t.index ["partner_id"], name: "index_syndication_licenses_on_partner_id"
+  end
+
+  create_table "syndication_partners", force: :cascade do |t|
+    t.integer "organization_id", null: false
+    t.string "name", null: false
+    t.string "contact_email", null: false
+    t.string "api_token", null: false
+    t.string "webhook_secret"
+    t.integer "status", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["api_token"], name: "index_syndication_partners_on_api_token", unique: true
+    t.index ["organization_id"], name: "index_syndication_partners_on_organization_id"
+  end
+
+  create_table "syndication_usage_reports", force: :cascade do |t|
+    t.integer "license_id", null: false
+    t.date "period_start", null: false
+    t.integer "pickups", default: 0, null: false
+    t.integer "impressions", default: 0, null: false
+    t.datetime "reported_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["license_id", "period_start"], name: "index_syndication_usage_reports_on_license_id_and_period_start", unique: true
+    t.index ["license_id"], name: "index_syndication_usage_reports_on_license_id"
+  end
+
   create_table "tags", force: :cascade do |t|
     t.string "name", null: false
     t.datetime "created_at", null: false
@@ -391,6 +550,18 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_14_000002) do
   add_foreign_key "newsletter_campaigns", "publications"
   add_foreign_key "newsletter_deliveries", "newsletter_campaigns", column: "campaign_id"
   add_foreign_key "newsletter_deliveries", "subscribers"
+  add_foreign_key "payouts_earnings", "payouts_payees", column: "payee_id"
+  add_foreign_key "payouts_earnings", "payouts_statements", column: "statement_id"
+  add_foreign_key "payouts_individual_profiles", "authors"
+  add_foreign_key "payouts_payees", "organizations"
+  add_foreign_key "payouts_payout_runs", "authors", column: "started_by_id"
+  add_foreign_key "payouts_payout_runs", "organizations"
+  add_foreign_key "payouts_rate_cards", "publications"
+  add_foreign_key "payouts_representations", "authors"
+  add_foreign_key "payouts_representations", "payouts_agency_profiles", column: "agency_profile_id"
+  add_foreign_key "payouts_statements", "payouts_payees", column: "payee_id"
+  add_foreign_key "payouts_statements", "payouts_payout_runs", column: "payout_run_id"
+  add_foreign_key "payouts_transfers", "payouts_statements", column: "statement_id"
   add_foreign_key "publications", "organizations"
   add_foreign_key "review_assignments", "article_revisions"
   add_foreign_key "review_assignments", "authors", column: "reviewer_id"
@@ -401,6 +572,11 @@ ActiveRecord::Schema[8.0].define(version: 2026_09_14_000002) do
   add_foreign_key "support_ticket_messages", "support_tickets", column: "ticket_id"
   add_foreign_key "support_tickets", "authors", column: "assignee_id"
   add_foreign_key "support_tickets", "subscribers"
+  add_foreign_key "syndication_licenses", "articles"
+  add_foreign_key "syndication_licenses", "authors", column: "granted_by_id"
+  add_foreign_key "syndication_licenses", "syndication_partners", column: "partner_id"
+  add_foreign_key "syndication_partners", "organizations"
+  add_foreign_key "syndication_usage_reports", "syndication_licenses", column: "license_id"
   add_foreign_key "webhook_deliveries", "activity_events"
   add_foreign_key "webhook_deliveries", "webhook_endpoints"
   add_foreign_key "webhook_endpoints", "organizations"

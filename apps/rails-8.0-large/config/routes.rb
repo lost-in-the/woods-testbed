@@ -30,5 +30,7 @@ Rails.application.routes.draw do
   post '/graphql', to: 'graphql#create'
   post '/run_due', to: 'dashboard#run_due', as: :run_due
   post '/webhooks/:id/retry', to: 'dashboard#retry_webhook', as: :retry_webhook
+  draw(:payouts)
+  draw(:syndication)
   root 'dashboard#index'
 end

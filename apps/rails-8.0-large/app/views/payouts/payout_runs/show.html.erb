@@ -1,0 +1,4 @@
+<h1>Payout run for <%= @run.period_start.strftime('%B %Y') %></h1><p><%= render StatusBadgeComponent.new(status: @run.status) %> · <%= @run.period_start %> to <%= @run.period_end %></p>
+<div class="metrics"><div class="card"><span class="metric"><%= @statements.size %></span> statements</div><div class="card"><span class="metric"><%= @statements.count(&:held?) %></span> held</div><div class="card"><span class="metric"><%= render MoneyComponent.new(cents: @statements.sum(&:total_cents), currency: 'USD') %></span> total</div></div>
+<table><thead><tr><th>Payee</th><th>Status</th><th>Total</th><th>Hold reason</th></tr></thead><tbody><% @statements.each do |statement| %><%= render Payouts::StatementRowComponent.new(statement: statement) %><% end %></tbody></table>
+<% if @run.drafted? %><%= button_to 'Finalize run', finalize_payouts_payout_run_path(@run) %><% end %>

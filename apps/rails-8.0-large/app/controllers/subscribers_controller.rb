@@ -1,4 +1,5 @@
 class SubscribersController < ApplicationController
+  include CurrentTenant
   before_action :require_session
   before_action :require_editor
   def index

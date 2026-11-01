@@ -14,6 +14,9 @@ class Article < ApplicationRecord
   has_many :comments, dependent: :destroy
   has_many :article_tags, dependent: :destroy
   has_many :tags, through: :article_tags
+  has_many :licenses, class_name: 'Syndication::License'
+  # Revoked licenses still hold foreign keys, so the restrict check must see them.
+  has_many :all_licenses, -> { unscope(where: :revoked_at) }, class_name: 'Syndication::License', dependent: :restrict_with_error
 
   validates :title, presence: true
   validates :slug, presence: true, uniqueness: true

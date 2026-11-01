@@ -65,12 +65,17 @@ Dir.mktmpdir('canopy-incremental-') do |scratch|
   full_source = source_check.call
   if full_source
     raise 'full source coverage remains partial' unless full_source['unverified_scopes'].empty?
-    # Ordinary task runs cannot advance the runtime boot scope. Everything else
-    # must have consumed current bytes; retain that difference explicitly.
+    # Ordinary task runs cannot advance the runtime boot scope, and a family
+    # the gem skips because its relevant facts compare equal keeps its previous
+    # identity: a body-only concern edit leaves table ownership unchanged, so
+    # `whole:database_tables` may retain the edited file's baseline identity
+    # (woods PR #912). Everything else must have consumed current bytes; only
+    # the edited path may retain, and only in those scopes.
+    retaining_scopes = %w[runtime whole:database_tables]
     incremental_source.fetch('scopes').each do |scope, paths|
       paths.each do |source_path, version|
         next if version == 'current'
-        unless scope == 'runtime' && source_path == path && version == 'retained:baseline'
+        unless retaining_scopes.include?(scope) && source_path == path && version == 'retained:baseline'
           raise "unexpected retained source consumer #{scope}: #{source_path}"
         end
       end

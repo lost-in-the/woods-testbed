@@ -171,6 +171,11 @@ if parser_path.file? && renderer_path.file?
   # Process-local: this runner exits when the script does.
   Rails.logger.level = Logger::ERROR if Rails.logger.respond_to?(:level=)
   require 'woods/extractor'
+  begin
+    require 'woods/input_rules'
+  rescue LoadError
+    nil # older gem: the incremental-classification check below is skipped
+  end
 
   results << assert('full extraction completes') do
     Woods::Extractor.new(output_dir: output_dir).extract_all
@@ -209,7 +214,7 @@ if parser_path.file? && renderer_path.file?
     raise "indexed as bare wrapper at #{file}" if file.end_with?('/parser.rb', '/renderer.rb')
   end
 
-  # Incremental leg. The point is the dispatch — governed naming must survive
+  # Incremental leg. The point is the dispatch: governed naming must survive
   # re-extraction of one wrapper file and the publish that follows. Two
   # probes, because the gem's return contract distinguishes them: identical
   # registered bytes never enter `touched` (an mtime-only touch is skipped,
@@ -217,9 +222,18 @@ if parser_path.file? && renderer_path.file?
   # child. The earlier single probe bumped only the mtime and expected the
   # child in `touched`, which asserted the pre-2.1 contract.
   results << assert('incremental run over an mtime-only touch of parser.rb skips the unchanged child') do
+    relative = 'app/services/domain/container/parser.rb'
+    # The positive half first, so an absent Parser cannot pass by default:
+    # the gem must treat the path as incremental work (not ignore or refuse
+    # it), and the run must return its touched list, proving the dispatch
+    # ran and finished before the negative check below means anything.
+    if defined?(Woods::InputRules)
+      action = Woods::InputRules.new.action(relative)
+      raise "gem classifies #{relative} as #{action.inspect}, not :incremental" unless action == :incremental
+    end
     File.utime(Time.now, Time.now, parser_path)
-    touched = Woods::Extractor.new(output_dir: output_dir)
-                              .extract_changed(['app/services/domain/container/parser.rb'])
+    touched = Woods::Extractor.new(output_dir: output_dir).extract_changed([relative])
+    raise "extract_changed returned #{touched.inspect}, not a touched list" unless touched.is_a?(Array)
     raise "touched #{touched.inspect}" if touched.include?('Domain::Container::Parser')
   end
 
