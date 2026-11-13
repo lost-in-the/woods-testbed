@@ -138,6 +138,39 @@ def profile(*args)
   output
 end
 
+# A unit file and a whole type directory inside the payload that are symlinks
+# to units outside the index. Neither may be read.
+def plant_escaping_links(payload, outside)
+  stray = unit('model', 'Skunkworks::Stray', 'app/models/stray.rb', "class Stray\nend\n", {})
+  write_json(File.join(outside, 'stray.json'), stray)
+  write_json(File.join(outside, 'jobs', 'u0_0a1b2c3d.json'), unit('job', 'Skunkworks::Job', nil, 'x', {}))
+  File.symlink(File.join(outside, 'stray.json'), File.join(payload, 'models', 'u9_0a1b2c3d.json'))
+  File.symlink(File.join(outside, 'jobs'), File.join(payload, 'jobs'))
+end
+
+# The marker's payload must resolve inside the index: equal to it or below it
+# with a separator. A sibling whose name starts with the index's name, and a
+# symlink to a directory outside it, are both refused with nothing printed.
+def assert_payload_contained(tmp)
+  root = File.join(tmp, 'contained')
+  index = File.join(root, 'tmp/woods')
+  build_index(File.join(root, 'tmp/woods-old/payloads/gen-1'))
+  write_json(File.join(index, 'generation.json'), number: 1, reason: 'full', payload: '../woods-old/payloads/gen-1')
+  refused('a sibling-prefix payload', '--root', root)
+
+  build_index(File.join(tmp, 'elsewhere/payloads/gen-1'))
+  FileUtils.mkdir_p(File.join(index, 'payloads'))
+  File.symlink(File.join(tmp, 'elsewhere/payloads/gen-1'), File.join(index, 'payloads/gen-1'))
+  write_json(File.join(index, 'generation.json'), number: 1, reason: 'full', payload: 'payloads/gen-1')
+  refused('a payload symlinked outside the index', '--root', root)
+end
+
+def refused(label, *args)
+  output, status = Open3.capture2e(RbConfig.ruby, SCRIPT, *args)
+  check("#{label} is refused", !status.success? && !output.include?('profile_version'))
+  assert_no_canaries(output, label)
+end
+
 def assert_no_canaries(text, label)
   CANARIES.each { |canary| check("#{label} leaks a planted string", !text.downcase.include?(canary.downcase)) }
   check("#{label} leaks a planted number", !text.include?(PLANTED_NUMBER.to_s[0, 7]))
@@ -267,6 +300,7 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   build_app(root)
   build_index(File.join(index, 'payloads/gen-3'))
   write_json(File.join(index, 'generation.json'), number: 3, reason: 'incremental', payload: 'payloads/gen-3')
+  plant_escaping_links(File.join(index, 'payloads/gen-3'), File.join(tmp, 'outside'))
   with_git = git_history(root)
 
   text = profile('--root', root)
@@ -280,6 +314,8 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   check('--out prints nothing', profile('--root', root, File.join(index, 'payloads/gen-3'), '--out', out).empty?)
   flat = JSON.parse(File.read(out))
   check('flat index', flat.dig('index', 'total_units') == 6 && flat.dig('woods_run', 'extraction_mode') == 'unknown')
+
+  assert_payload_contained(tmp)
 
   table = profile('--compare', out, out)
   assert_no_canaries(table, 'the comparison')
