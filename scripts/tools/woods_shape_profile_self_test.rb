@@ -25,6 +25,11 @@ CANARIES = %w[
   secret-branch deadbeefcafe acme-corp Skunkworks skunkworks_dir mystery_stat ruby-3.3.6-acme Fix\ the\ ledger
 ].freeze
 
+# An application-chosen number (an ID, a timestamp, a magic constant) planted in
+# index metadata. A number copied from metadata must never reach the profile:
+# measured quantities are emitted, copied ones only as log2 bucket boundaries.
+PLANTED_NUMBER = 1_094_929_733
+
 def check(label, condition)
   raise "FAIL #{label}" unless condition
 end
@@ -50,7 +55,7 @@ def build_index(payload)
                columns: [{ name: 'iban_number' }, { name: 'id' }])
   owner = unit('model', 'Zyxwv::Owner', 'app/models/zyxwv/owner.rb', "class Zyxwv::Owner\nend\n",
                table_name: 'qq_owners', inlined_concerns: ['Hushable'], associations: [], callbacks: [],
-               validations: [], scopes: [{ name: 'open_sesame' }], column_count: 3)
+               validations: [], scopes: [{ name: 'open_sesame' }], column_count: PLANTED_NUMBER)
   controller = unit('controller', 'VaultController', 'app/controllers/vault_controller.rb',
                     "class VaultController\nend",
                     actions: %w[show open_sesame], filters: [{ filter: 'open_sesame', origin: 'app' }],
@@ -86,7 +91,8 @@ def write_graph(payload)
   write_json(File.join(payload, 'graph_analysis.json'),
              hubs: [{ identifier: 'Zyxwv::SecretLedgerAccount', dependent_count: 2 }],
              cycles: [%w[Zyxwv::SecretLedgerAccount Zyxwv::Owner]],
-             stats: { cycle_count: 1, cycle_limit_reached: false, mystery_stat: 4, hub_count: 'Skunkworks' })
+             stats: { cycle_count: 1, cycle_limit_reached: false, mystery_stat: 4, hub_count: 'Skunkworks',
+                      orphan_count: PLANTED_NUMBER })
 end
 
 def write_manifest(payload)
@@ -94,7 +100,7 @@ def write_manifest(payload)
              woods_version: '2.1.0', rails_version: '7.1.3.4', ruby_version: 'ruby-3.3.6-acme',
              git_branch: 'feature/secret-branch', git_sha: 'deadbeefcafe', root: '/home/zebediah/acme-corp',
              counts: { models: 2, controllers: 1, routes: 1, concerns: 1, skunkworks_dir: 1 }, total_units: 6,
-             total_chunks: 0, extractor_timings: { models: 0.5, skunkworks_dir: 0.25 },
+             total_chunks: PLANTED_NUMBER, extractor_timings: { models: 0.5, skunkworks_dir: PLANTED_NUMBER / 1000.0 },
              git_enrichment: { state: 'Skunkworks' })
 end
 
@@ -106,11 +112,21 @@ def build_app(root)
     'packs/acme-corp/app/models/thing.rb' => "class Thing\nend\n",
     'spec/models/secret_ledger_spec.rb' => "# spec\n",
     'vendor/bundle/ignored.rb' => "# ignored\n",
+    # The app's own script/ directory is application code and is counted.
+    'script/backfill_ledgers.rb' => "# one\n# two\n",
+    # The testbed's shared scripts, mounted at script/shared in every variant: tooling, not the app.
+    'script/shared/woods_smoke.rb' => "# tooling\n", 'script/shared/support/session.rb' => "# tooling\n",
+    'script/shared/tools/woods_shape_profile.rb' => "# tooling\n",
     'Gemfile.lock' => "GEM\n  remote: https://acme-corp.example/\n  specs:\n    acme_private_gem (1.2.3)\n" \
                       "      rack (>= 2)\n    rack (3.0.0)\n\nDEPENDENCIES\n  acme_private_gem\n" }.each do |path, text|
     FileUtils.mkdir_p(File.dirname(File.join(root, path)))
     File.write(File.join(root, path), text)
   end
+  # A directory that resolves outside the application root is not the application either.
+  outside = File.join(File.dirname(root), 'outside-app')
+  FileUtils.mkdir_p(outside)
+  File.write(File.join(outside, 'elsewhere.rb'), "# outside\n")
+  File.symlink(outside, File.join(root, 'script/linked'))
 end
 
 def git_history(root)
@@ -132,8 +148,157 @@ def profile(*args)
   output
 end
 
+# A unit file and a whole type directory inside the payload that are symlinks
+# to units outside the index. Neither may be read.
+def plant_escaping_links(payload, outside)
+  stray = unit('model', 'Skunkworks::Stray', 'app/models/stray.rb', "class Stray\nend\n", {})
+  write_json(File.join(outside, 'stray.json'), stray)
+  write_json(File.join(outside, 'jobs', 'u0_0a1b2c3d.json'), unit('job', 'Skunkworks::Job', nil, 'x', {}))
+  File.symlink(File.join(outside, 'stray.json'), File.join(payload, 'models', 'u9_0a1b2c3d.json'))
+  File.symlink(File.join(outside, 'jobs'), File.join(payload, 'jobs'))
+end
+
+# The marker's payload must resolve inside the index: equal to it or below it
+# with a separator. A sibling whose name starts with the index's name, and a
+# symlink to a directory outside it, are both refused with nothing printed.
+def assert_payload_contained(tmp)
+  root = File.join(tmp, 'contained')
+  index = File.join(root, 'tmp/woods')
+  build_index(File.join(root, 'tmp/woods-old/payloads/gen-1'))
+  write_json(File.join(index, 'generation.json'), number: 1, reason: 'full', payload: '../woods-old/payloads/gen-1')
+  refused('a sibling-prefix payload', '--root', root)
+
+  build_index(File.join(tmp, 'elsewhere/payloads/gen-1'))
+  FileUtils.mkdir_p(File.join(index, 'payloads'))
+  File.symlink(File.join(tmp, 'elsewhere/payloads/gen-1'), File.join(index, 'payloads/gen-1'))
+  write_json(File.join(index, 'generation.json'), number: 1, reason: 'full', payload: 'payloads/gen-1')
+  refused('a payload symlinked outside the index', '--root', root)
+end
+
+# `--compare` is total: any two JSON documents compare without raising,
+# whatever sits at a metric's path on either side.
+def assert_compare_total(tmp)
+  sides = { 'negative' => -2, 'other_negative' => -8, 'positive' => 4, 'zero' => 0, 'null' => nil,
+            'string' => '12', 'object' => { 'max' => 3 }, 'list' => [1], 'tiny' => 1.0e-308, 'huge' => 1.0e308 }
+  paths = sides.to_h do |name, value|
+    path = File.join(tmp, "compare-#{name}.json")
+    File.write(path, JSON.generate('index' => { 'total_units' => value }, 'graph' => { 'edges_per_node' => value }))
+    [name, path]
+  end
+  paths['missing'] = File.join(tmp, 'compare-missing.json').tap { |path| File.write(path, '{"graph":{}}') }
+  paths['array'] = File.join(tmp, 'compare-array.json').tap { |path| File.write(path, '[1, 2]') }
+  # Every pair in process (each would raise here); one pair through the command line.
+  rows = paths.keys.product(paths.keys).to_h do |left, right|
+    table = WoodsShapeProfile::Compare.call(paths[left], paths[right])
+    [[left, right], table.lines.find { |line| line.start_with?('units ') }.to_s.split]
+  end
+  check('--compare negative positive exits 0', profile('--compare', paths['negative'], paths['positive'])
+                                                 .match?(/^units\s+-2\s+4\s+-2\.00x$/))
+  check('negative over positive', rows[%w[negative positive]].last(3) == %w[-2 4 -2.00x])
+  check('negative over negative', rows[%w[negative other_negative]].last(3) == %w[-2 -8 4.00x])
+  check('negative against zero', rows[%w[negative zero]].last == '0.00x' && rows[%w[zero negative]].last == 'inf')
+  %w[null string object list missing array].each do |absent|
+    check("#{absent} reads as no value", rows[['positive', absent]].last(3) == %w[4 - n/a] &&
+                                          rows[[absent, 'negative']].last(3) == %w[- -2 n/a])
+  end
+  check('ratio overflow', rows[%w[tiny huge]].last == 'inf' && rows[%w[huge tiny]].last == '0.00x')
+  output, status = Open3.capture2e(RbConfig.ruby, SCRIPT, '--compare', paths['positive'], SCRIPT)
+  check('a file that is not JSON is refused cleanly', !status.success? && !output.include?('Error)'))
+end
+
+# `--timings` children: a failure reports which child, a fixed-vocabulary
+# cause and the exit status, never the child's output (it can name the app).
+def assert_timings_causes(tmp)
+  root = File.join(tmp, 'timed')
+  FileUtils.mkdir_p(File.join(root, 'bin'))
+  timings = lambda do |script, **options|
+    File.write(File.join(root, 'bin/rails'), script)
+    result = WoodsShapeProfile::AppWeight.new(root, {}, timings: true, **options).send(:timings, true)
+    document = JSON.parse(JSON.generate('app_weight' => { 'timings' => result }))
+    WoodsShapeProfile::Privacy.verify!(document)
+    assert_no_canaries(JSON.generate(document), 'a timings result')
+    document.dig('app_weight', 'timings')
+  end
+  noisy = "$stderr.puts 'Zyxwv::SecretLedgerAccount is broken in /hidden/vault'; "
+  ok = timings.call("ARGV[1] == 'nil' || puts('WOODS_SHAPE_TIMING 0.5 10 3 2')")
+  check('timings succeed', ok['available'] == true && ok['eager_load_seconds'] == 0.5 &&
+                           ok['modules_defined_by_eager_load'] == 10 && ok['active_record_descendants'] == 2)
+  check('nonzero exit', timings.call("#{noisy}exit 3") == failed('boot', 'nonzero_exit', 3))
+  check('killed by a signal', timings.call("#{noisy}Process.kill('TERM', Process.pid); sleep 5") ==
+                              failed('boot', 'signaled', 128 + Signal.list.fetch('TERM')))
+  check('no marker', timings.call("ARGV[1] == 'nil' || puts('Zyxwv::SecretLedgerAccount')") ==
+                     failed('eager_load', 'no_marker', 0))
+  check('timeout', timings.call("#{noisy}sleep 30", child_timeout: 1) == failed('boot', 'timeout', nil))
+  check('command not found', timings.call('exit 0', ruby: File.join(tmp, 'no-such-ruby')) ==
+                             failed('boot', 'command_not_found', nil))
+end
+
+# One deadline bounds the whole child interaction, the output read included.
+# Each case would hang (or grow without bound) if only the wait were bounded.
+def assert_timings_deadline(tmp)
+  root = File.join(tmp, 'deadline')
+  FileUtils.mkdir_p(File.join(root, 'bin'))
+  pid_file = File.join(tmp, 'grandchild.pid')
+  # A grandchild that inherits stdout and outlives the child, as a daemon or a forked server would.
+  grandchild = "File.write(#{pid_file.inspect}, Process.spawn(RbConfig.ruby, '-e', 'sleep 30').to_s); "
+  marker = "puts('WOODS_SHAPE_TIMING 0.5 10 3 2'); "
+  run = lambda do |label, eager_script|
+    File.write(File.join(root, 'bin/rails'), "exit 0 if ARGV[1] == 'nil'\n#{eager_script}\n")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = WoodsShapeProfile::AppWeight.new(root, {}, timings: true, child_timeout: 1.5, output_grace: 0.3)
+                                         .send(:timings, true)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    check("#{label}: bounded by the deadline", elapsed < 6)
+    document = JSON.parse(JSON.generate('app_weight' => { 'timings' => result }))
+    WoodsShapeProfile::Privacy.verify!(document)
+    assert_no_canaries(JSON.generate(document), label)
+    document.dig('app_weight', 'timings')
+  end
+
+  open_pipe = run.call('exit 0, pipe held open', "#{grandchild}puts('Zyxwv'); exit 0")
+  check('exit 0, pipe held open', open_pipe == failed('eager_load', 'output_open', 0))
+  check('the grandchild is killed', dead?(File.read(pid_file).to_i))
+  measured = run.call('marker, then pipe held open', "#{marker}#{grandchild}exit 0")
+  check('marker, then pipe held open', measured['available'] == true && measured['eager_load_seconds'] == 0.5)
+  failing = run.call('exit 4, pipe held open', "#{grandchild}exit 4")
+  check('exit 4, pipe held open', failing == failed('eager_load', 'nonzero_exit', 4))
+  hung = run.call('marker, then hangs', "#{marker}$stdout.flush; sleep 30")
+  check('marker, then hangs', hung.slice('available', 'failed_child', 'cause', 'eager_load_seconds') ==
+                              { 'available' => false, 'failed_child' => 'eager_load', 'cause' => 'timeout',
+                                'eager_load_seconds' => 0.5 })
+  flood = run.call('floods without a newline', "chunk = 'Zyxwv' * 13_107; loop { $stdout.write(chunk) }")
+  check('floods without a newline', flood == failed('eager_load', 'timeout', nil))
+  closed = run.call('closes stdout, keeps running', "$stdout.close; $stderr.close; sleep 30")
+  check('closes stdout, keeps running', closed == failed('eager_load', 'timeout', nil))
+end
+
+# Gone, or a zombie waiting for init: either way no longer running.
+def dead?(pid)
+  20.times do
+    state = File.read("/proc/#{pid}/stat").split(') ').last.to_s[0]
+    return true if state == 'Z'
+
+    sleep 0.1
+  end
+  false
+rescue Errno::ENOENT, Errno::ESRCH
+  true
+end
+
+def failed(child, cause, exit_status)
+  { 'available' => false, 'reason' => 'child_failed', 'failed_child' => child, 'cause' => cause,
+    'exit_status' => exit_status }
+end
+
+def refused(label, *args)
+  output, status = Open3.capture2e(RbConfig.ruby, SCRIPT, *args)
+  check("#{label} is refused", !status.success? && !output.include?('profile_version'))
+  assert_no_canaries(output, label)
+end
+
 def assert_no_canaries(text, label)
   CANARIES.each { |canary| check("#{label} leaks a planted string", !text.downcase.include?(canary.downcase)) }
+  check("#{label} leaks a planted number", !text.include?(PLANTED_NUMBER.to_s[0, 7]))
 end
 
 def assert_numbers(doc, with_git)
@@ -152,25 +317,38 @@ def assert_numbers(doc, with_git)
   check('namespaces', graph.dig('namespaces', 'top_level_namespaces') == 1 &&
                       graph.dig('namespaces', 'root_units') == 4)
   check('cycle', graph.dig('cycles', 'largest_component') == 4)
-  check('analysis stats filtered', graph.dig('cycles', 'analysis') ==
-                                   { 'cycle_count' => 1, 'cycle_limit_reached' => false })
+  check('analysis stats filtered and bucketed', graph.dig('cycles', 'analysis') ==
+                                   { 'cycle_count' => 1, 'cycle_limit_reached' => false,
+                                     'orphan_count' => 2**31 })
   check('model facts', doc.dig('models', 'callbacks', 'max') == 2 &&
                        doc.dig('models', 'application_callbacks', 'max') == 1 &&
-                       doc.dig('models', 'columns', 'max') == 3 && doc.dig('models', 'concern_fan_in_top_10') == [2])
+                       doc.dig('models', 'concern_fan_in_top_10') == [2])
+  # The owner records only `column_count`: a count copied from metadata, not measured, so it is not used.
+  check('model columns measured, not copied',
+        doc.dig('models', 'columns') == { 'count' => 1, 'min' => 2, 'p50' => 2, 'p90' => 2, 'p99' => 2, 'max' => 2,
+                                          'mean' => 2.0, 'histogram' => [{ 'le' => 2, 'count' => 1 }] })
   check('controller facts', doc.dig('controllers', 'actions', 'max') == 2 &&
                             doc.dig('controllers', 'routes_total_index') == 1)
   files = doc['files']
   check('files', files.dig('ruby', 'app', 'count') == 2 && files.dig('ruby', 'lib', 'count') == 1 &&
                  files.dig('ruby', 'packages', 'count') == 1 && files['view_templates'] == 1 &&
                  files['test_files'] == 1 && files.dig('ruby', 'app', 'lines', 'max') == 4)
+  check('mounted tooling not counted, own scripts counted',
+        files.dig('ruby', 'elsewhere', 'count') == 1 && files.dig('ruby', 'elsewhere', 'lines', 'max') == 2 &&
+        files.dig('ruby', 'all', 'count') == 5 && files['tooling_dirs_skipped'] == 1)
   check('app weight', doc.dig('app_weight', 'gems_in_lockfile') == 2 &&
                       doc.dig('app_weight', 'rails_version') == '7.1.3.4' &&
                       doc.dig('app_weight', 'ruby_version').nil? &&
                       doc.dig('app_weight', 'timings') == { 'available' => false, 'reason' => 'not_requested' })
   run = doc['woods_run']
   check('run facts', run['woods_version'] == '2.1.0' && run['extraction_mode'] == 'incremental' &&
-                     run['extractor_timings'] == { 'models' => 0.5, 'other' => 0.25 } &&
                      run['units_by_directory']['other'] == 1 && run['git_enrichment_state'] == 'other')
+  # Everything in woods_run is copied from the manifest, so it is emitted only as a log2 bucket boundary.
+  check('run facts bucketed', run['extractor_timings'] == { 'models' => 0.5, 'other' => 2.0**21 } &&
+                              run['total_units'] == 8 && run['total_chunks'] == 2**31 && run['generation'] == 4 &&
+                              run['units_by_directory'] == { 'concerns' => 1, 'controllers' => 1, 'models' => 2,
+                                                             'other' => 1, 'routes' => 1 } &&
+                              run['extractor_timings_total'] == 2.0**21)
   assert_history(doc['history'], with_git)
 end
 
@@ -203,7 +381,28 @@ def assert_self_check(doc)
   expect_leak('a nested string') { privacy.verify!(mutate.call { |d| d['graph']['top_hubs'] << ['Hushable'] }) }
   expect_leak('a bad version') { privacy.verify!(mutate.call { |d| d['woods_run']['woods_version'] = 'acme 1.0' }) }
   expect_leak('a version elsewhere') { privacy.verify!(mutate.call { |d| d['index']['reader'] = '2.1.0' }) }
+  assert_numeric_rule(privacy, mutate)
   assert_seal_aborts(doc)
+end
+
+# Numbers: only under a measured-quantity key or in a count table, never negative,
+# and only bucket boundaries where the value was copied from index metadata.
+def assert_numeric_rule(privacy, mutate)
+  expect_leak('a number under a non-numeric key') do
+    privacy.verify!(mutate.call { |d| d['graph']['available'] = PLANTED_NUMBER })
+  end
+  expect_leak('a number in place of a reason') do
+    privacy.verify!(mutate.call { |d| d['app_weight']['timings']['reason'] = PLANTED_NUMBER })
+  end
+  expect_leak('a negative count') { privacy.verify!(mutate.call { |d| d['index']['total_units'] = -3 }) }
+  expect_leak('a copied run fact') { privacy.verify!(mutate.call { |d| d['woods_run']['total_units'] = 6 }) }
+  expect_leak('a copied timing') do
+    privacy.verify!(mutate.call { |d| d['woods_run']['extractor_timings']['models'] = 0.3 })
+  end
+  expect_leak('a copied analysis count') do
+    privacy.verify!(mutate.call { |d| d['graph']['cycles']['analysis']['cycle_count'] = 3 })
+  end
+  check('a measured extreme passes', privacy.verify!(mutate.call { |d| d['index']['total_units'] = PLANTED_NUMBER }))
 end
 
 # Privacy.seal is what main prints through: a leak must exit non-zero and say nothing of the value.
@@ -229,6 +428,7 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   build_app(root)
   build_index(File.join(index, 'payloads/gen-3'))
   write_json(File.join(index, 'generation.json'), number: 3, reason: 'incremental', payload: 'payloads/gen-3')
+  plant_escaping_links(File.join(index, 'payloads/gen-3'), File.join(tmp, 'outside'))
   with_git = git_history(root)
 
   text = profile('--root', root)
@@ -243,6 +443,8 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   flat = JSON.parse(File.read(out))
   check('flat index', flat.dig('index', 'total_units') == 6 && flat.dig('woods_run', 'extraction_mode') == 'unknown')
 
+  assert_payload_contained(tmp)
+
   table = profile('--compare', out, out)
   assert_no_canaries(table, 'the comparison')
   check('comparison table', table.lines.size > 10 && table.match?(/^units\s+6\s+6\s+1\.00x$/))
@@ -254,6 +456,10 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   check('zero B reads as none of A', profile('--compare', out, empty).match?(/^units\s+6\s+0\s+0\.00x$/))
   check('zero against zero is equal', profile('--compare', empty, empty).match?(/^units\s+0\s+0\s+1\.00x$/))
   check('a zero side sorts first', profile('--compare', out, empty).lines[1].start_with?('units'))
+
+  assert_compare_total(tmp)
+  assert_timings_causes(tmp)
+  assert_timings_deadline(tmp)
 
   puts "PASS shape profile: no planted string emitted, numbers exact, self-check aborts on a bypass#{
     ' (git history skipped: git unavailable)' unless with_git}"

@@ -218,6 +218,17 @@ bin/rails runner path/to/woods_shape_profile.rb --timings --out shape.json
 The index directory defaults to `tmp/woods`; pass another as the first
 argument. `--timings` boots the app twice in child processes to time boot and
 eager load; leave it off to skip that.
+Each child runs in its own process group under one 15-minute deadline that covers starting it, waiting for it and
+reading its output, so a process it leaves behind holding the output open cannot stall the profiler.
+A child that fails is reported as `failed_child` (`boot` or `eager_load`), a `cause` and its `exit_status`.
+The causes are `nonzero_exit`, `signaled`, `command_not_found`, `spawn_failed`;
+`timeout` (still running at the deadline: its process group is killed);
+`output_open` (it exited 0 without the timing line, and its output was still held open 5 seconds after the exit, by a
+process it left behind, which is then killed); and `no_marker` (it exited 0, its output closed, no timing line).
+Timing numbers the child printed before failing are kept; the child's own output is never copied, and only one line
+of it is held at a time, since an error message can name the application.
+It reads only files that resolve inside the index directory: a payload or unit file that is, or sits behind, a symlink
+out of it is skipped, and a generation marker naming a payload outside it (`../woods-old/...`) is refused.
 
 It emits only numbers (counts, ratios and distributions: units by type, source
 size, graph degrees, hub in-degrees, blast radius, namespace spread, cycles,
@@ -231,6 +242,27 @@ fixed lists. It uses no network and writes nothing but the `--out` file. The
 limits are in the script's header: exact totals and version numbers do describe
 the app, so read the JSON before sending it.
 
+A number in the profile is one of two things.
+It is a quantity the script measured itself: a count of units, edges, files or list entries, a size in bytes or lines,
+a ratio of two such counts, a duration it timed, a depth or rank it computed, or a histogram bucket boundary.
+Or it is a number Woods recorded in the index (the manifest's counts and extractor timings, the generation number,
+`graph_analysis.json` counts), and then it appears only as its log2 bucket boundary (0, 1, 2, 4, 8, ...; for seconds
+also 0.5, 0.25, ... down to 2^-10), never as itself: those sections are `woods_run` and `graph.cycles.analysis`.
+A number is never copied out of the application's metadata: an ID, a timestamp, a port, a column limit or a count
+Woods stored beside a list (`column_count`) is not used; the list itself is measured instead.
+The self-check enforces this: every number must be finite, not negative, and sit under a key on the script's list of
+measured-quantity keys (`MEASURED_KEYS`) or in a table keyed by a unit type, directory or edge label; under a
+copied key or section it must be 0 or a power of two.
+A large measured value (the longest model, the biggest hub) is still emitted exactly: that is the point of the
+profile.
+
+File counts describe the application, not tooling mounted into it.
+A directory laid out like the testbed's shared scripts (`tools/woods_shape_profile.rb`, `support/` and
+`woods_smoke.rb`), which every variant mounts at `script/shared`, is skipped whole wherever it sits and counted only in
+`files.tooling_dirs_skipped`; a symlink is never followed, so nothing outside the application root is counted.
+An application's own `script/` directory is counted as usual, even with a copy of the profiler in it.
+In a Canopy container the mount added 99 Ruby files to the 163 of the application before this rule.
+
 Two profiles of Canopy are checked in under `shape/`: `canopy-base.json` (the
 committed app) and `canopy-scale-large.json` (after `SCALE=large
 generate_scale_app.rb`). Git history is reported as unavailable in a shallow
@@ -242,6 +274,8 @@ ruby scripts/tools/woods_shape_profile.rb --compare \
 ```
 
 The table lists the ratios that drive extraction cost, largest gap first.
+It takes any two JSON documents: a value that is missing, null or not a number reads as `-` with ratio `n/a`, a zero
+or opposite-signed side sorts as the largest gap, and a file that is not JSON is refused without quoting it.
 
 See [the implementation plan](../../docs/plans/003-functional-publishing-app.md)
 and [validation notes](../../docs/canopy-validation.md) for the measured baseline,

@@ -39,6 +39,15 @@
 #   document before anything is printed: it walks every key and every string
 #   value and aborts, printing nothing, when one is outside the lists.
 #
+#   Numbers follow the same rule. A number is either a quantity this script
+#   measured (a count, a size, a line count, a ratio of counts, a duration it
+#   timed, a depth, a rank) or a number Woods recorded in the index, which is
+#   emitted only as its log2 bucket boundary (Stats.bucket). Nothing is copied
+#   from application metadata: an ID, timestamp or stored count is never used.
+#   Privacy.verify! rejects a number that is negative, non-finite, under a key
+#   outside MEASURED_KEYS, COPIED_KEYS and COUNT_TABLES, or not a bucket
+#   boundary under COPIED_KEYS or BUCKETED_SECTIONS.
+#
 # ITS LIMITS
 #   * Numbers describe the app. Exact totals (4,217 models, 913 gems) can
 #     confirm a guess by someone who already has the code. They cannot name it.
@@ -50,11 +59,16 @@
 #     you send it. It is short.
 #
 # WHAT IT TOUCHES
-#   No network. It reads the index, stats the files under the application root
+#   No network. It reads the index (only files that resolve inside the index
+#   directory: see Paths.inside?), stats the files under the application root
 #   (line counts only), reads Gemfile.lock, and runs read-only `git` commands.
 #   It writes nothing except the file named by --out. `--timings` boots the
 #   application twice in child processes (`bin/rails runner`), which does
-#   whatever booting your app does (logs, bootsnap cache).
+#   whatever booting your app does (logs, bootsnap cache). One deadline
+#   (CHILD_TIMEOUT) bounds each child from spawn to the last byte read, so a
+#   process it leaves holding the output open cannot stall the profiler; its
+#   process group is killed. A failure is reported by a fixed cause and the
+#   exit status, never by the child's output.
 
 require 'json'
 require 'open3'
@@ -104,7 +118,8 @@ module WoodsShapeProfile
   ENUMS = (%w[
     published_index direct full incremental refresh seed watch unknown available unavailable partial
     shallow git_unavailable not_a_repository no_app_root not_requested no_rails no_lockfile child_failed
-    missing unreadable
+    missing unreadable boot eager_load command_not_found spawn_failed nonzero_exit signaled timeout no_marker
+    output_open
   ] + [OTHER, UNLABELLED]).freeze
 
   VERSION_KEYS = %w[ruby_version rails_version woods_version].freeze
@@ -129,11 +144,12 @@ module WoodsShapeProfile
     sti_children concern_fan_in_top_10 concern_fan_in_top_10_all_units concerns_included_by_models
     tables indexes foreign_keys
     actions filters application_filters routes routes_per_controller routes_total_index routes_total_runtime
-    ruby app lib packages elsewhere lines view_templates test_files walk_truncated files_seen
+    ruby app lib packages elsewhere lines view_templates test_files walk_truncated files_seen tooling_dirs_skipped
     gems_in_lockfile gems_loaded ruby_version rails_version eager_load_configured engines initializers timings
     boot_seconds eager_load_seconds eager_boot_wall_seconds autoloaded_constants modules_defined_by_eager_load
     active_record_descendants
-    reason total_commits commits_last_365_days contributors files_per_commit commits_per_app_file
+    reason failed_child cause exit_status
+    total_commits commits_last_365_days contributors files_per_commit commits_per_app_file
     commits_walked app_files_touched
     woods_version extraction_mode generation total_chunks units_by_directory extractor_timings
     extractor_timings_total git_enrichment_state
@@ -141,33 +157,91 @@ module WoodsShapeProfile
 
   ALLOWED_STRINGS = (UNIT_TYPES + TYPE_DIRS + VIA_LABELS + ENUMS).to_set.freeze
 
+  # The keys whose value may be a number, or a list of numbers: quantities this
+  # script measures itself (counts, sizes, line counts, ratios, durations, depths,
+  # ranks, bucket boundaries), its own constants (profile_version, node_limit),
+  # and the exit status of a failed `--timings` child (0-255, as the OS reports it).
+  # A number under any other key is a leak.
+  MEASURED_KEYS = %w[
+    profile_version count min p50 p90 p99 max mean sum le total_units
+    nodes edges edges_per_node resolved_edges unresolved_edge_share variant_records rank in_degree out_degree
+    direct_share depth_2_share depth_3_share transitive_share transitive_units depth node_limit
+    top_5_transitive_shares top_20_max_transitive_share structural_share sampled_models
+    top_level_namespaces root_units namespaced_units namespaced_edge_share cross_namespace_edge_share
+    cross_namespace_edge_share_including_root strongly_connected_components largest_component units_in_components
+    self_loops sti_children concerns_included_by_models concern_fan_in_top_10 concern_fan_in_top_10_all_units
+    routes_total_index routes_total_runtime files_seen view_templates test_files tooling_dirs_skipped
+    gems_in_lockfile gems_loaded engines initializers boot_seconds eager_load_seconds eager_boot_wall_seconds
+    modules_defined_by_eager_load autoloaded_constants active_record_descendants
+    total_commits commits_last_365_days contributors commits_walked app_files_touched
+    exit_status
+  ].to_set.freeze
+
+  # Numbers copied from index metadata rather than measured: Woods' own counts,
+  # timings and generation number. Anything in the metadata could be an
+  # application-chosen value (an ID, a timestamp, a port), so each is emitted
+  # only as a log2 bucket boundary (Stats.bucket), never as itself.
+  COPIED_KEYS = %w[
+    total_chunks generation extractor_timings_total orphan_count dead_end_count hub_count cycle_count
+    cross_database_edge_count volatile_dependency_count undeclared_package_edge_count unresolvable_route_count
+    unmodelled_table_count domain_cluster_count
+  ].to_set.freeze
+
+  # Tables keyed by a fixed label (a unit type, a type directory, an edge label) with a number per label.
+  COUNT_TABLES = %w[units_by_type edges_by_via units_by_directory extractor_timings].to_set.freeze
+
+  # Sections read from index metadata: every number anywhere under them must be a bucket boundary.
+  BUCKETED_SECTIONS = %w[woods_run analysis].to_set.freeze
+
   # The gate between the collected document and stdout.
   module Privacy
     class Leak < StandardError; end
 
     module_function
 
+    # Strings must be on the fixed lists. Numbers must be finite and not
+    # negative, must sit under a MEASURED_KEYS or COPIED_KEYS key or in a
+    # COUNT_TABLES table, and must be a bucket boundary (0 or a power of two)
+    # under a COPIED_KEYS key or anywhere in a BUCKETED_SECTIONS section.
+    #
     # @param document [Hash] the profile exactly as it will be serialized (string keys)
     # @raise [Leak] naming the JSON path (never the offending value) of the first violation
-    def verify!(document, path = '$')
-      case document
-      when Hash
-        document.each do |key, value|
-          raise Leak, "key outside the allow-list under #{path}" unless ALLOWED_KEYS.include?(key)
-
-          if value.is_a?(String) && VERSION_KEYS.include?(key)
-            raise Leak, "malformed version at #{path}.#{key}" unless VERSION_PATTERN.match?(value)
-          else
-            verify!(value, "#{path}.#{key}")
-          end
-        end
-      when Array then document.each_with_index { |value, index| verify!(value, "#{path}[#{index}]") }
-      when String then raise Leak, "string outside the allow-list at #{path}" unless ALLOWED_STRINGS.include?(document)
-      when Integer, true, false, nil then nil
-      when Float then raise Leak, "non-finite number at #{path}" unless document.finite?
-      else raise Leak, "unexpected #{document.class} at #{path}"
-      end
+    def verify!(document)
+      walk(document, '$', nil, numeric: false, bucketed: false)
       document
+    end
+
+    # @param key [String, nil] the key holding this value; a list passes its key to its elements
+    def walk(value, path, key, numeric:, bucketed:)
+      case value
+      when Hash then value.each { |child, inner| walk_entry(child, inner, path, key, bucketed) }
+      when Array
+        value.each_with_index { |inner, i| walk(inner, "#{path}[#{i}]", key, numeric: numeric, bucketed: bucketed) }
+      when String then raise Leak, "string outside the allow-list at #{path}" unless ALLOWED_STRINGS.include?(value)
+      when true, false, nil then nil
+      when Integer, Float then number!(value, path, numeric: numeric, bucketed: bucketed)
+      else raise Leak, "unexpected #{value.class} at #{path}"
+      end
+    end
+
+    def walk_entry(child, inner, path, key, bucketed)
+      raise Leak, "key outside the allow-list under #{path}" unless ALLOWED_KEYS.include?(child)
+
+      child_path = "#{path}.#{child}"
+      if inner.is_a?(String) && VERSION_KEYS.include?(child)
+        raise Leak, "malformed version at #{child_path}" unless VERSION_PATTERN.match?(inner)
+      else
+        numeric = MEASURED_KEYS.include?(child) || COPIED_KEYS.include?(child) || COUNT_TABLES.include?(key)
+        bucketed ||= BUCKETED_SECTIONS.include?(child) || COPIED_KEYS.include?(child)
+        walk(inner, child_path, child, numeric: numeric, bucketed: bucketed)
+      end
+    end
+
+    def number!(value, path, numeric:, bucketed:)
+      raise Leak, "number under a key that holds no measured quantity at #{path}" unless numeric
+      raise Leak, "non-finite number at #{path}" if value.is_a?(Float) && !value.finite?
+      raise Leak, "negative number at #{path}" if value.negative?
+      raise Leak, "copied number that is not a bucket boundary at #{path}" if bucketed && !Stats.boundary?(value)
     end
 
     # Serialize, re-read and verify: what is checked is what is printed.
@@ -232,12 +306,54 @@ module WoodsShapeProfile
       value.is_a?(Float) ? value.round(3) : value
     end
 
+    SMALLEST_BUCKET_EXPONENT = -10
+
+    # The log2 bucket boundary at or above a number copied from index metadata:
+    # 0, 1, 2, 4, 8, ... for an integer; 0.0, 2**-10, ..., 0.5, 1.0, 2.0, ... for a
+    # float. Negative values bucket to zero; anything else is nil.
+    def bucket(value)
+      case value
+      when Integer then bound(value)
+      when Float
+        return nil unless value.finite?
+
+        value <= 0 ? 0.0 : 2.0**[Math.log2(value).ceil, SMALLEST_BUCKET_EXPONENT].max
+      end
+    end
+
+    # @return [Boolean] whether a number is a value #bucket can return
+    def boundary?(value)
+      return false unless value.is_a?(Numeric) && !value.negative?
+      return true if value.zero?
+      return (value & (value - 1)).zero? if value.is_a?(Integer)
+
+      Math.frexp(value).first == 0.5 && value >= 2.0**SMALLEST_BUCKET_EXPONENT
+    end
+
     def ratio(part, whole)
       whole.to_f.zero? ? nil : (part.to_f / whole).round(4)
     end
 
     def by_type(table)
       table.sort.to_h { |type, values| [type, dist(values)] }
+    end
+  end
+
+  # Path containment, the one rule every read of the index goes through.
+  module Paths
+    module_function
+
+    # A path is inside a root only when, both resolved (File.realpath, so no
+    # `..` and no symlink can step out), it equals the root or starts with the
+    # root plus a separator: `/x/woods-old` is not inside `/x/woods`.
+    #
+    # @return [Boolean] false as well when either path does not exist
+    def inside?(path, root)
+      real = File.realpath(path)
+      base = File.realpath(root)
+      real == base || real.start_with?(base.end_with?(File::SEPARATOR) ? base : base + File::SEPARATOR)
+    rescue SystemCallError
+      false
     end
   end
 
@@ -250,6 +366,9 @@ module WoodsShapeProfile
       @published = open_published
       @reader_name = @published ? 'published_index' : 'direct'
       @payload_dir = @published ? @published.payload_dir.to_s : direct_payload_dir
+      unless Paths.inside?(@payload_dir, @index_dir)
+        abort 'woods_shape_profile: the published payload resolves outside the index directory; nothing was written.'
+      end
       abort "woods_shape_profile: no Woods index (manifest.json) under #{index_dir}" unless artifact?('manifest.json')
     end
 
@@ -271,7 +390,7 @@ module WoodsShapeProfile
     # @return [Hash, Array, nil] a Woods JSON artifact of the payload, read as UTF-8
     def artifact(name)
       path = File.join(@payload_dir, name)
-      return nil unless File.file?(path)
+      return nil unless readable?(path)
 
       JSON.parse(read(path))
     rescue JSON::ParserError, SystemCallError
@@ -279,12 +398,12 @@ module WoodsShapeProfile
     end
 
     def artifact?(name)
-      File.file?(File.join(@payload_dir, name))
+      readable?(File.join(@payload_dir, name))
     end
 
     def marker
       path = File.join(@index_dir, 'generation.json')
-      data = File.file?(path) ? JSON.parse(read(path)) : {}
+      data = File.file?(path) && Paths.inside?(path, @index_dir) ? JSON.parse(read(path)) : {}
       data.is_a?(Hash) ? data : {}
     rescue JSON::ParserError, SystemCallError
       {}
@@ -292,10 +411,15 @@ module WoodsShapeProfile
 
     def unit_file_sizes
       Dir.glob(File.join(@payload_dir, '*', '*.json')).reject { |path| File.basename(path).start_with?('_') }
-         .map { |path| File.size(path) }
+         .select { |path| readable?(path) }.map { |path| File.size(path) }
     end
 
     private
+
+    # A regular file that resolves inside the payload: a symlink out of it is never read.
+    def readable?(path)
+      File.file?(path) && Paths.inside?(path, @payload_dir)
+    end
 
     def open_published
       require 'woods/published_index' unless defined?(Woods::PublishedIndex)
@@ -304,16 +428,21 @@ module WoodsShapeProfile
       nil
     end
 
+    # The marker's payload when it resolves inside the index; the index itself
+    # (a flat, pre-generation index) when there is no marker or it names nothing.
+    # A payload that exists outside the index is returned as is, and refused.
     def direct_payload_dir
       payload = marker['payload']
-      candidate = payload.is_a?(String) ? File.expand_path(payload, @index_dir) : @index_dir
-      candidate.start_with?(@index_dir) && File.directory?(candidate) ? candidate : @index_dir
+      return @index_dir unless payload.is_a?(String)
+
+      candidate = File.expand_path(payload, @index_dir)
+      File.directory?(candidate) ? candidate : @index_dir
     end
 
     def each_unit_directly
       Dir.children(@payload_dir).sort.each do |dir|
         Dir.glob(File.join(@payload_dir, dir, '*.json')).sort.each do |path|
-          next if File.basename(path).start_with?('_')
+          next if File.basename(path).start_with?('_') || !readable?(path)
 
           unit = begin
             JSON.parse(read(path))
@@ -394,12 +523,12 @@ module WoodsShapeProfile
       source.count("\n") + (source.end_with?("\n") ? 0 : 1)
     end
 
-    def size_of(metadata, list_key, count_key = nil)
+    # The size of a list Woods recorded, measured here. A count Woods recorded
+    # beside it (`column_count`, `action_count`) is never used: it is a number
+    # copied from metadata, and nothing guarantees it is a count.
+    def size_of(metadata, list_key)
       value = metadata[list_key]
-      return value.size if value.is_a?(Array) || value.is_a?(Hash)
-
-      count = count_key && metadata[count_key]
-      count.is_a?(Integer) ? count : nil
+      value.is_a?(Array) || value.is_a?(Hash) ? value.size : nil
     end
 
     def application_origin(list)
@@ -409,13 +538,13 @@ module WoodsShapeProfile
     end
 
     def add_model(metadata)
-      @model[:associations] << size_of(metadata, 'associations', 'association_count')
-      @model[:callbacks] << size_of(metadata, 'callbacks', 'callback_count')
+      @model[:associations] << size_of(metadata, 'associations')
+      @model[:callbacks] << size_of(metadata, 'callbacks')
       @model[:application_callbacks] << application_origin(metadata['callbacks'])
-      @model[:validations] << size_of(metadata, 'validations', 'validation_count')
+      @model[:validations] << size_of(metadata, 'validations')
       @model[:scopes] << size_of(metadata, 'scopes')
       @model[:inlined_concerns] << size_of(metadata, 'inlined_concerns')
-      @model[:columns] << size_of(metadata, 'columns', 'column_count')
+      @model[:columns] << size_of(metadata, 'columns')
       @model[:enums] << size_of(metadata, 'enums')
       @model[:methods] << size_of(metadata, 'methods')
       @sti_children += 1 if metadata['is_sti_child'] == true
@@ -423,15 +552,15 @@ module WoodsShapeProfile
     end
 
     def add_controller(metadata)
-      @controller[:actions] << size_of(metadata, 'actions', 'action_count')
-      @controller[:filters] << size_of(metadata, 'filters', 'filter_count')
+      @controller[:actions] << size_of(metadata, 'actions')
+      @controller[:filters] << size_of(metadata, 'filters')
       @controller[:application_filters] << application_origin(metadata['filters'])
       routes = metadata['routes']
       @controller[:routes_per_controller] << (routes.is_a?(Hash) ? routes.values.sum { |list| Array(list).size } : nil)
     end
 
     def add_table(metadata)
-      @table[:columns] << size_of(metadata, 'columns', 'column_count')
+      @table[:columns] << size_of(metadata, 'columns')
       @table[:indexes] << size_of(metadata, 'indexes')
       @table[:foreign_keys] << size_of(metadata, 'foreign_keys')
     end
@@ -617,7 +746,8 @@ module WoodsShapeProfile
     def cycles
       components = strongly_connected_components.select { |size| size > 1 }
       stats = @analysis['stats'].is_a?(Hash) ? @analysis['stats'] : {}
-      analysis = ANALYSIS_KEYS.to_h { |key| [key, stats[key]] }
+      # Woods' own counts, copied from graph_analysis.json: bucketed, never emitted as themselves.
+      analysis = ANALYSIS_KEYS.to_h { |key| [key, stats[key].is_a?(Integer) ? Stats.bucket(stats[key]) : stats[key]] }
                               .select { |_, value| value.is_a?(Integer) || [true, false].include?(value) }
       { strongly_connected_components: components.size, largest_component: components.max || 0,
         units_in_components: components.sum, self_loops: @self_loops, analysis: analysis }
@@ -697,11 +827,18 @@ module WoodsShapeProfile
     PACKAGE_ROOTS = %w[packs packages engines components gems].freeze
     TEST_DIRS = %w[spec test features].freeze
     LIMIT = 500_000
+    # The profile describes the application, not tooling mounted into it. The
+    # woods-testbed mounts its shared scripts directory at script/shared in
+    # every variant (a bind mount: a real directory, not a symlink). It is
+    # recognised by its layout, wherever it is mounted, and skipped whole; an
+    # application's own script/ directory, even one holding a copy of this
+    # profiler, lacks the layout and is counted.
+    TOOLING_LAYOUT = %w[tools/woods_shape_profile.rb support woods_smoke.rb].freeze
 
     def initialize(root)
       @root = root
       @lines = Hash.new { |hash, key| hash[key] = [] }
-      @views = @tests = @seen = 0
+      @views = @tests = @seen = @tooling = 0
       @truncated = false
     end
 
@@ -713,7 +850,8 @@ module WoodsShapeProfile
         ruby: %i[app lib packages elsewhere].to_h do |bucket|
           [bucket, { count: @lines[bucket].size, lines: Stats.dist(@lines[bucket], histogram: true) }]
         end.merge(all: { count: all_lines.size, lines: Stats.dist(all_lines, histogram: true) }),
-        view_templates: @views, test_files: @tests, files_seen: @seen, walk_truncated: @truncated }
+        view_templates: @views, test_files: @tests, files_seen: @seen, walk_truncated: @truncated,
+        tooling_dirs_skipped: @tooling }
     end
 
     private
@@ -732,15 +870,23 @@ module WoodsShapeProfile
         return @truncated = true if @seen >= LIMIT
 
         path = File.join(dir, name)
+        # A symlink can lead outside the application root; it is never followed.
         next if File.symlink?(path)
 
         if File.directory?(path)
-          walk(path, segments + [name]) unless segments.empty? && SKIP.include?(name)
+          next if segments.empty? && SKIP.include?(name)
+          next @tooling += 1 if tooling?(path)
+
+          walk(path, segments + [name])
         elsif File.file?(path)
           @seen += 1
           classify(path, name, segments)
         end
       end
+    end
+
+    def tooling?(dir)
+      TOOLING_LAYOUT.all? { |entry| File.exist?(File.join(dir, entry)) }
     end
 
     def classify(path, name, segments)
@@ -787,10 +933,24 @@ module WoodsShapeProfile
       puts ['#{MARKER}', elapsed.round(3), ObjectSpace.each_object(Module).count - before, expected, models].join(' ')
     RUBY
 
-    def initialize(root, manifest, timings:)
+    # One deadline bounds each child from spawn to the last byte read.
+    CHILD_TIMEOUT = 900
+    # After the child exits, how long its output may stay open (held by a
+    # process it left behind) before reading stops, within the deadline.
+    OUTPUT_GRACE = 5
+    POLL = 0.05
+
+    # @param ruby [String] the interpreter that runs bin/rails (the self-test points it elsewhere)
+    # @param child_timeout [Numeric] seconds from spawn after which the child's group is killed
+    # @param output_grace [Numeric] seconds the output may stay open after the child exits
+    def initialize(root, manifest, timings:, ruby: RbConfig.ruby, child_timeout: CHILD_TIMEOUT,
+                   output_grace: OUTPUT_GRACE)
       @root = root
       @manifest = manifest
       @timings = timings
+      @ruby = ruby
+      @child_timeout = child_timeout
+      @output_grace = output_grace
     end
 
     def to_h
@@ -826,23 +986,183 @@ module WoodsShapeProfile
       return { available: false, reason: 'not_requested' } unless @timings
       return { available: false, reason: 'no_rails' } unless rails && @root && File.file?(File.join(@root, 'bin/rails'))
 
-      boot, = run_child('nil')
-      wall, output = run_child(CHILD)
-      fields = output.to_s[/^#{MARKER} ([\d. -]+)$/, 1]&.split
-      return { available: false, reason: 'child_failed' } unless boot && wall && fields&.size == 4
+      boot = run_child('nil')
+      return child_failed('boot', boot) unless boot[:seconds]
 
+      eager = run_child(CHILD)
+      return child_failed('eager_load', eager) unless eager[:seconds] && eager[:marker]
+
+      { available: true, boot_seconds: boot[:seconds].round(2), eager_boot_wall_seconds: eager[:seconds].round(2) }
+        .merge(measured(eager[:marker]))
+    end
+
+    # The four numbers the eager-load child printed after the marker: what this
+    # script's own code measured. A negative value is its "could not measure"
+    # sentinel and is dropped.
+    def measured(fields)
       positive = ->(text) { text.to_i.negative? ? nil : text.to_i }
-      { available: true, boot_seconds: boot.round(2), eager_load_seconds: fields[0].to_f,
-        eager_boot_wall_seconds: wall.round(2), modules_defined_by_eager_load: fields[1].to_i,
+      seconds = fields[0].to_f
+      { eager_load_seconds: seconds.negative? ? nil : seconds, modules_defined_by_eager_load: positive.call(fields[1]),
         autoloaded_constants: positive.call(fields[2]), active_record_descendants: positive.call(fields[3]) }
     end
 
+    # Which child failed and why, from a fixed vocabulary, plus the marker's
+    # numbers if the child printed them before it failed. The child's output is
+    # never part of it: an error message can name the application.
+    def child_failed(child, result)
+      cause = result[:cause] || (result[:output_open] ? 'output_open' : 'no_marker')
+      failure = { available: false, reason: 'child_failed', failed_child: child, cause: cause,
+                  exit_status: result[:exit_status] }
+      result[:marker] ? failure.merge(measured(result[:marker])) : failure
+    end
+
+    # Runs `bin/rails runner code` in its own process group under one deadline
+    # that covers spawn, wait and reading the output. Only the marker line is
+    # kept (MarkerScan); nothing else of the output is retained.
+    #
+    # @return [Hash] { seconds:, exit_status: 0, marker:, output_open: } when the child exited 0,
+    #   else { cause:, exit_status:, marker: }
     def run_child(code)
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      output, status = Open3.capture2e(RbConfig.ruby, 'bin/rails', 'runner', code, chdir: @root)
-      status.success? ? [Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, output] : nil
-    rescue SystemCallError
+      started = now
+      reader, writer = IO.pipe
+      begin
+        pid = Process.spawn(@ruby, 'bin/rails', 'runner', code, chdir: @root, pgroup: true,
+                                                                in: File::NULL, out: writer, err: writer)
+      ensure
+        writer.close
+      end
+      collect(pid, reader, started)
+    rescue Errno::ENOENT, Errno::EACCES
+      { cause: 'command_not_found' }
+    rescue SystemCallError, IOError
+      { cause: 'spawn_failed' }
+    ensure
+      reader.close if reader && !reader.closed?
+    end
+
+    # Read and reap until the child has exited and its output reached EOF, the
+    # output has stayed open OUTPUT_GRACE past the exit, or the deadline passed.
+    def collect(pid, io, started)
+      deadline = started + @child_timeout
+      scan = MarkerScan.new
+      status = exited_at = nil
+      eof = false
+      loop do
+        status ||= reap(pid)
+        exited_at ||= now if status
+        break if status && eof
+
+        limit = status ? [deadline, exited_at + @output_grace].min : deadline
+        remaining = limit - now
+        break unless remaining.positive?
+
+        if eof
+          sleep([remaining, POLL].min)
+        elsif IO.select([io], nil, nil, [remaining, POLL].min)
+          eof = !read_chunk(io, scan)
+        end
+      end
+      finish(pid, status, eof, scan, exited_at && exited_at - started)
+    end
+
+    def finish(pid, status, eof, scan, seconds)
+      # Whatever is still running in the group (the child at the deadline, or
+      # what it left holding the output) is ours to stop.
+      kill_group(pid, reap: status.nil?) unless status && eof
+      return { cause: 'timeout', marker: scan.marker } unless status
+      return exited(status).merge(marker: scan.marker) unless status.success?
+
+      { seconds: seconds, exit_status: 0, marker: scan.marker, output_open: !eof }
+    end
+
+    # @return [Boolean] false at EOF
+    def read_chunk(io, scan)
+      chunk = io.read_nonblock(1 << 16, exception: false)
+      return false if chunk.nil?
+
+      scan << chunk if chunk.is_a?(String)
+      true
+    rescue IOError, SystemCallError
+      false
+    end
+
+    def reap(pid)
+      _, status = Process.waitpid2(pid, Process::WNOHANG)
+      status
+    rescue Errno::ECHILD
       nil
+    end
+
+    def kill_group(pid, reap:)
+      begin
+        Process.kill('KILL', -pid)
+      rescue SystemCallError
+        nil
+      end
+      return unless reap
+
+      begin
+        Process.wait(pid)
+      rescue SystemCallError
+        nil
+      end
+    end
+
+    def now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def exited(status)
+      return { cause: 'signaled', exit_status: 128 + status.termsig } if status.signaled?
+
+      { cause: 'nonzero_exit', exit_status: status.exitstatus }
+    end
+
+    # Finds the first marker line in a child's output while holding at most one
+    # line of LINE_LIMIT bytes: a longer line (a flood without a newline) is
+    # dropped as it grows, and no other text is kept.
+    class MarkerScan
+      LINE_LIMIT = 4096
+      PATTERN = /\A#{MARKER} ([\d. -]+)\r?\z/n.freeze
+
+      attr_reader :marker
+
+      def initialize
+        @line = String.new(encoding: Encoding::BINARY)
+        @overflow = false
+        @marker = nil
+      end
+
+      def <<(chunk)
+        parts = chunk.b.split("\n", -1)
+        tail = parts.pop
+        parts.each do |part|
+          append(part)
+          check(@line) unless @overflow
+          @line = String.new(encoding: Encoding::BINARY)
+          @overflow = false
+        end
+        append(tail.to_s)
+      end
+
+      private
+
+      def append(text)
+        return if @overflow
+
+        @line << text
+        return unless @line.bytesize > LINE_LIMIT
+
+        @line = String.new(encoding: Encoding::BINARY)
+        @overflow = true
+      end
+
+      def check(line)
+        return if @marker
+
+        fields = line[PATTERN, 1]&.split
+        @marker = fields if fields&.size == 4
+      end
     end
   end
 
@@ -919,17 +1239,25 @@ module WoodsShapeProfile
 
     module_function
 
+    # Every number here is copied from the manifest or the marker, so each is
+    # emitted as its log2 bucket boundary (Stats.bucket) and never as itself.
     def call(manifest, marker)
       timings = manifest['extractor_timings'].is_a?(Hash) ? manifest['extractor_timings'] : {}
       { woods_version: Privacy.version(manifest['woods_version']),
         extraction_mode: marker['reason'] ? Privacy.enum(marker['reason'], MODES) : 'unknown',
-        generation: marker['number'].is_a?(Integer) ? marker['number'] : nil,
-        total_units: integer(manifest['total_units']), total_chunks: integer(manifest['total_chunks']),
-        units_by_directory: bucketed(manifest['counts']) { |value| integer(value) || 0 },
-        extractor_timings: bucketed(timings) { |value| value.is_a?(Numeric) ? value.to_f : 0.0 }
-          .transform_values { |seconds| seconds.round(3) },
-        extractor_timings_total: timings.empty? ? nil : timings.values.grep(Numeric).sum.to_f.round(3),
+        generation: Stats.bucket(integer(marker['number'])),
+        total_units: Stats.bucket(integer(manifest['total_units'])),
+        total_chunks: Stats.bucket(integer(manifest['total_chunks'])),
+        units_by_directory: by_directory(manifest['counts']) { |value| integer(value) || 0 }
+          .transform_values { |count| Stats.bucket(count) },
+        extractor_timings: by_directory(timings) { |value| seconds(value) }
+          .transform_values { |total| Stats.bucket(total) },
+        extractor_timings_total: timings.empty? ? nil : Stats.bucket(timings.values.sum { |value| seconds(value) }),
         git_enrichment_state: enrichment(manifest['git_enrichment']) }
+    end
+
+    def seconds(value)
+      value.is_a?(Numeric) && value.finite? ? value.to_f : 0.0
     end
 
     def integer(value)
@@ -937,7 +1265,7 @@ module WoodsShapeProfile
     end
 
     # Sum a directory-keyed table; keys outside Woods' directories go to "other".
-    def bucketed(table)
+    def by_directory(table)
       return {} unless table.is_a?(Hash)
 
       table.each_with_object(Hash.new(0)) do |(key, value), result|
@@ -1017,7 +1345,7 @@ module WoodsShapeProfile
     module_function
 
     def call(path_a, path_b)
-      a, b = [path_a, path_b].map { |path| JSON.parse(File.read(path, encoding: 'UTF-8')) }
+      a, b = [path_a, path_b].map { |path| load(path) }
       rows = METRICS.map { |label, path| row(label, dig(a, path), dig(b, path)) }
       rows = rows.sort_by.with_index { |entry, i| [entry[:gap] ? -entry[:gap] : Float::INFINITY, i] }
       lines = [format('%-36s %14s %14s %9s', 'metric (larger gaps first)', 'A', 'B', 'B / A')]
@@ -1027,24 +1355,42 @@ module WoodsShapeProfile
       lines.join("\n")
     end
 
+    # A JSON document, or an abort that names neither the content nor the parser's message (which quotes it).
+    def load(path)
+      JSON.parse(File.read(path, encoding: 'UTF-8'))
+    rescue JSON::ParserError, EncodingError
+      abort 'woods_shape_profile: --compare takes two JSON profiles; one of them is not JSON.'
+    rescue SystemCallError
+      abort 'woods_shape_profile: --compare could not read one of the two files.'
+    end
+
+    # The number at a path, or nil: a missing key, a null, a string, a list, an
+    # object or a non-finite number all read as no value.
     def dig(document, path)
       value = path.reduce(document) do |node, key|
         node.is_a?(Hash) || (node.is_a?(Array) && key.is_a?(Integer)) ? node[key] : nil
       end
-      value.is_a?(Numeric) ? value : nil
+      value.is_a?(Integer) || (value.is_a?(Float) && value.finite?) ? value : nil
     end
 
+    # Total over any two numbers. The ratio shown is B / A; `gap` (for sorting)
+    # is |log(B / A)|, which needs a positive finite ratio, so every other case
+    # is decided first: no value, equal, a zero side, a ratio that overflows or
+    # underflows, and opposite signs (shown signed) all take the largest gap.
     def row(label, left, right)
-      return { label: label, a: left, b: right, ratio: 'n/a', gap: nil } unless left && right
-      return { label: label, a: left, b: right, ratio: '1.00x', gap: 0.0 } if left == right
-      # The ratio shown is B / A, so the two zero cases read differently: B
-      # over a zero A is unbounded, a zero B is none of A. Both are the
-      # largest possible gap for sorting.
-      return { label: label, a: left, b: right, ratio: 'inf', gap: Float::MAX } if left.zero?
-      return { label: label, a: left, b: right, ratio: '0.00x', gap: Float::MAX } if right.zero?
+      base = { label: label, a: left, b: right }
+      return base.merge(ratio: 'n/a', gap: nil) unless left && right
+      return base.merge(ratio: '1.00x', gap: 0.0) if left == right
+      # B over a zero A is unbounded; a zero B is none of A.
+      return base.merge(ratio: 'inf', gap: Float::MAX) if left.zero?
+      return base.merge(ratio: '0.00x', gap: Float::MAX) if right.zero?
 
       ratio = right.to_f / left
-      { label: label, a: left, b: right, ratio: format('%.2fx', ratio), gap: Math.log(ratio).abs }
+      return base.merge(ratio: 'inf', gap: Float::MAX) if ratio.infinite?
+      return base.merge(ratio: '0.00x', gap: Float::MAX) if ratio.zero?
+      return base.merge(ratio: format('%.2fx', ratio), gap: Float::MAX) if ratio.negative?
+
+      base.merge(ratio: format('%.2fx', ratio), gap: Math.log(ratio).abs)
     end
 
     def show(value)
