@@ -39,6 +39,15 @@
 #   document before anything is printed: it walks every key and every string
 #   value and aborts, printing nothing, when one is outside the lists.
 #
+#   Numbers follow the same rule. A number is either a quantity this script
+#   measured (a count, a size, a line count, a ratio of counts, a duration it
+#   timed, a depth, a rank) or a number Woods recorded in the index, which is
+#   emitted only as its log2 bucket boundary (Stats.bucket). Nothing is copied
+#   from application metadata: an ID, timestamp or stored count is never used.
+#   Privacy.verify! rejects a number that is negative, non-finite, under a key
+#   outside MEASURED_KEYS, COPIED_KEYS and COUNT_TABLES, or not a bucket
+#   boundary under COPIED_KEYS or BUCKETED_SECTIONS.
+#
 # ITS LIMITS
 #   * Numbers describe the app. Exact totals (4,217 models, 913 gems) can
 #     confirm a guess by someone who already has the code. They cannot name it.
@@ -141,33 +150,89 @@ module WoodsShapeProfile
 
   ALLOWED_STRINGS = (UNIT_TYPES + TYPE_DIRS + VIA_LABELS + ENUMS).to_set.freeze
 
+  # The keys whose value may be a number, or a list of numbers: quantities this
+  # script measures itself (counts, sizes, line counts, ratios, durations, depths,
+  # ranks, bucket boundaries) and its own constants (profile_version, node_limit).
+  # A number under any other key is a leak.
+  MEASURED_KEYS = %w[
+    profile_version count min p50 p90 p99 max mean sum le total_units
+    nodes edges edges_per_node resolved_edges unresolved_edge_share variant_records rank in_degree out_degree
+    direct_share depth_2_share depth_3_share transitive_share transitive_units depth node_limit
+    top_5_transitive_shares top_20_max_transitive_share structural_share sampled_models
+    top_level_namespaces root_units namespaced_units namespaced_edge_share cross_namespace_edge_share
+    cross_namespace_edge_share_including_root strongly_connected_components largest_component units_in_components
+    self_loops sti_children concerns_included_by_models concern_fan_in_top_10 concern_fan_in_top_10_all_units
+    routes_total_index routes_total_runtime files_seen view_templates test_files
+    gems_in_lockfile gems_loaded engines initializers boot_seconds eager_load_seconds eager_boot_wall_seconds
+    modules_defined_by_eager_load autoloaded_constants active_record_descendants
+    total_commits commits_last_365_days contributors commits_walked app_files_touched
+  ].to_set.freeze
+
+  # Numbers copied from index metadata rather than measured: Woods' own counts,
+  # timings and generation number. Anything in the metadata could be an
+  # application-chosen value (an ID, a timestamp, a port), so each is emitted
+  # only as a log2 bucket boundary (Stats.bucket), never as itself.
+  COPIED_KEYS = %w[
+    total_chunks generation extractor_timings_total orphan_count dead_end_count hub_count cycle_count
+    cross_database_edge_count volatile_dependency_count undeclared_package_edge_count unresolvable_route_count
+    unmodelled_table_count domain_cluster_count
+  ].to_set.freeze
+
+  # Tables keyed by a fixed label (a unit type, a type directory, an edge label) with a number per label.
+  COUNT_TABLES = %w[units_by_type edges_by_via units_by_directory extractor_timings].to_set.freeze
+
+  # Sections read from index metadata: every number anywhere under them must be a bucket boundary.
+  BUCKETED_SECTIONS = %w[woods_run analysis].to_set.freeze
+
   # The gate between the collected document and stdout.
   module Privacy
     class Leak < StandardError; end
 
     module_function
 
+    # Strings must be on the fixed lists. Numbers must be finite and not
+    # negative, must sit under a MEASURED_KEYS or COPIED_KEYS key or in a
+    # COUNT_TABLES table, and must be a bucket boundary (0 or a power of two)
+    # under a COPIED_KEYS key or anywhere in a BUCKETED_SECTIONS section.
+    #
     # @param document [Hash] the profile exactly as it will be serialized (string keys)
     # @raise [Leak] naming the JSON path (never the offending value) of the first violation
-    def verify!(document, path = '$')
-      case document
-      when Hash
-        document.each do |key, value|
-          raise Leak, "key outside the allow-list under #{path}" unless ALLOWED_KEYS.include?(key)
-
-          if value.is_a?(String) && VERSION_KEYS.include?(key)
-            raise Leak, "malformed version at #{path}.#{key}" unless VERSION_PATTERN.match?(value)
-          else
-            verify!(value, "#{path}.#{key}")
-          end
-        end
-      when Array then document.each_with_index { |value, index| verify!(value, "#{path}[#{index}]") }
-      when String then raise Leak, "string outside the allow-list at #{path}" unless ALLOWED_STRINGS.include?(document)
-      when Integer, true, false, nil then nil
-      when Float then raise Leak, "non-finite number at #{path}" unless document.finite?
-      else raise Leak, "unexpected #{document.class} at #{path}"
-      end
+    def verify!(document)
+      walk(document, '$', nil, numeric: false, bucketed: false)
       document
+    end
+
+    # @param key [String, nil] the key holding this value; a list passes its key to its elements
+    def walk(value, path, key, numeric:, bucketed:)
+      case value
+      when Hash then value.each { |child, inner| walk_entry(child, inner, path, key, bucketed) }
+      when Array
+        value.each_with_index { |inner, i| walk(inner, "#{path}[#{i}]", key, numeric: numeric, bucketed: bucketed) }
+      when String then raise Leak, "string outside the allow-list at #{path}" unless ALLOWED_STRINGS.include?(value)
+      when true, false, nil then nil
+      when Integer, Float then number!(value, path, numeric: numeric, bucketed: bucketed)
+      else raise Leak, "unexpected #{value.class} at #{path}"
+      end
+    end
+
+    def walk_entry(child, inner, path, key, bucketed)
+      raise Leak, "key outside the allow-list under #{path}" unless ALLOWED_KEYS.include?(child)
+
+      child_path = "#{path}.#{child}"
+      if inner.is_a?(String) && VERSION_KEYS.include?(child)
+        raise Leak, "malformed version at #{child_path}" unless VERSION_PATTERN.match?(inner)
+      else
+        numeric = MEASURED_KEYS.include?(child) || COPIED_KEYS.include?(child) || COUNT_TABLES.include?(key)
+        bucketed ||= BUCKETED_SECTIONS.include?(child) || COPIED_KEYS.include?(child)
+        walk(inner, child_path, child, numeric: numeric, bucketed: bucketed)
+      end
+    end
+
+    def number!(value, path, numeric:, bucketed:)
+      raise Leak, "number under a key that holds no measured quantity at #{path}" unless numeric
+      raise Leak, "non-finite number at #{path}" if value.is_a?(Float) && !value.finite?
+      raise Leak, "negative number at #{path}" if value.negative?
+      raise Leak, "copied number that is not a bucket boundary at #{path}" if bucketed && !Stats.boundary?(value)
     end
 
     # Serialize, re-read and verify: what is checked is what is printed.
@@ -230,6 +295,30 @@ module WoodsShapeProfile
 
     def num(value)
       value.is_a?(Float) ? value.round(3) : value
+    end
+
+    SMALLEST_BUCKET_EXPONENT = -10
+
+    # The log2 bucket boundary at or above a number copied from index metadata:
+    # 0, 1, 2, 4, 8, ... for an integer; 0.0, 2**-10, ..., 0.5, 1.0, 2.0, ... for a
+    # float. Negative values bucket to zero; anything else is nil.
+    def bucket(value)
+      case value
+      when Integer then bound(value)
+      when Float
+        return nil unless value.finite?
+
+        value <= 0 ? 0.0 : 2.0**[Math.log2(value).ceil, SMALLEST_BUCKET_EXPONENT].max
+      end
+    end
+
+    # @return [Boolean] whether a number is a value #bucket can return
+    def boundary?(value)
+      return false unless value.is_a?(Numeric) && !value.negative?
+      return true if value.zero?
+      return (value & (value - 1)).zero? if value.is_a?(Integer)
+
+      Math.frexp(value).first == 0.5 && value >= 2.0**SMALLEST_BUCKET_EXPONENT
     end
 
     def ratio(part, whole)
@@ -394,12 +483,12 @@ module WoodsShapeProfile
       source.count("\n") + (source.end_with?("\n") ? 0 : 1)
     end
 
-    def size_of(metadata, list_key, count_key = nil)
+    # The size of a list Woods recorded, measured here. A count Woods recorded
+    # beside it (`column_count`, `action_count`) is never used: it is a number
+    # copied from metadata, and nothing guarantees it is a count.
+    def size_of(metadata, list_key)
       value = metadata[list_key]
-      return value.size if value.is_a?(Array) || value.is_a?(Hash)
-
-      count = count_key && metadata[count_key]
-      count.is_a?(Integer) ? count : nil
+      value.is_a?(Array) || value.is_a?(Hash) ? value.size : nil
     end
 
     def application_origin(list)
@@ -409,13 +498,13 @@ module WoodsShapeProfile
     end
 
     def add_model(metadata)
-      @model[:associations] << size_of(metadata, 'associations', 'association_count')
-      @model[:callbacks] << size_of(metadata, 'callbacks', 'callback_count')
+      @model[:associations] << size_of(metadata, 'associations')
+      @model[:callbacks] << size_of(metadata, 'callbacks')
       @model[:application_callbacks] << application_origin(metadata['callbacks'])
-      @model[:validations] << size_of(metadata, 'validations', 'validation_count')
+      @model[:validations] << size_of(metadata, 'validations')
       @model[:scopes] << size_of(metadata, 'scopes')
       @model[:inlined_concerns] << size_of(metadata, 'inlined_concerns')
-      @model[:columns] << size_of(metadata, 'columns', 'column_count')
+      @model[:columns] << size_of(metadata, 'columns')
       @model[:enums] << size_of(metadata, 'enums')
       @model[:methods] << size_of(metadata, 'methods')
       @sti_children += 1 if metadata['is_sti_child'] == true
@@ -423,15 +512,15 @@ module WoodsShapeProfile
     end
 
     def add_controller(metadata)
-      @controller[:actions] << size_of(metadata, 'actions', 'action_count')
-      @controller[:filters] << size_of(metadata, 'filters', 'filter_count')
+      @controller[:actions] << size_of(metadata, 'actions')
+      @controller[:filters] << size_of(metadata, 'filters')
       @controller[:application_filters] << application_origin(metadata['filters'])
       routes = metadata['routes']
       @controller[:routes_per_controller] << (routes.is_a?(Hash) ? routes.values.sum { |list| Array(list).size } : nil)
     end
 
     def add_table(metadata)
-      @table[:columns] << size_of(metadata, 'columns', 'column_count')
+      @table[:columns] << size_of(metadata, 'columns')
       @table[:indexes] << size_of(metadata, 'indexes')
       @table[:foreign_keys] << size_of(metadata, 'foreign_keys')
     end
@@ -617,7 +706,8 @@ module WoodsShapeProfile
     def cycles
       components = strongly_connected_components.select { |size| size > 1 }
       stats = @analysis['stats'].is_a?(Hash) ? @analysis['stats'] : {}
-      analysis = ANALYSIS_KEYS.to_h { |key| [key, stats[key]] }
+      # Woods' own counts, copied from graph_analysis.json: bucketed, never emitted as themselves.
+      analysis = ANALYSIS_KEYS.to_h { |key| [key, stats[key].is_a?(Integer) ? Stats.bucket(stats[key]) : stats[key]] }
                               .select { |_, value| value.is_a?(Integer) || [true, false].include?(value) }
       { strongly_connected_components: components.size, largest_component: components.max || 0,
         units_in_components: components.sum, self_loops: @self_loops, analysis: analysis }
@@ -831,9 +921,12 @@ module WoodsShapeProfile
       fields = output.to_s[/^#{MARKER} ([\d. -]+)$/, 1]&.split
       return { available: false, reason: 'child_failed' } unless boot && wall && fields&.size == 4
 
+      # The child prints what this script's own code measured; a negative value
+      # is its "could not measure" sentinel and is dropped.
       positive = ->(text) { text.to_i.negative? ? nil : text.to_i }
-      { available: true, boot_seconds: boot.round(2), eager_load_seconds: fields[0].to_f,
-        eager_boot_wall_seconds: wall.round(2), modules_defined_by_eager_load: fields[1].to_i,
+      seconds = fields[0].to_f
+      { available: true, boot_seconds: boot.round(2), eager_load_seconds: seconds.negative? ? nil : seconds,
+        eager_boot_wall_seconds: wall.round(2), modules_defined_by_eager_load: positive.call(fields[1]),
         autoloaded_constants: positive.call(fields[2]), active_record_descendants: positive.call(fields[3]) }
     end
 
@@ -919,17 +1012,25 @@ module WoodsShapeProfile
 
     module_function
 
+    # Every number here is copied from the manifest or the marker, so each is
+    # emitted as its log2 bucket boundary (Stats.bucket) and never as itself.
     def call(manifest, marker)
       timings = manifest['extractor_timings'].is_a?(Hash) ? manifest['extractor_timings'] : {}
       { woods_version: Privacy.version(manifest['woods_version']),
         extraction_mode: marker['reason'] ? Privacy.enum(marker['reason'], MODES) : 'unknown',
-        generation: marker['number'].is_a?(Integer) ? marker['number'] : nil,
-        total_units: integer(manifest['total_units']), total_chunks: integer(manifest['total_chunks']),
-        units_by_directory: bucketed(manifest['counts']) { |value| integer(value) || 0 },
-        extractor_timings: bucketed(timings) { |value| value.is_a?(Numeric) ? value.to_f : 0.0 }
-          .transform_values { |seconds| seconds.round(3) },
-        extractor_timings_total: timings.empty? ? nil : timings.values.grep(Numeric).sum.to_f.round(3),
+        generation: Stats.bucket(integer(marker['number'])),
+        total_units: Stats.bucket(integer(manifest['total_units'])),
+        total_chunks: Stats.bucket(integer(manifest['total_chunks'])),
+        units_by_directory: by_directory(manifest['counts']) { |value| integer(value) || 0 }
+          .transform_values { |count| Stats.bucket(count) },
+        extractor_timings: by_directory(timings) { |value| seconds(value) }
+          .transform_values { |total| Stats.bucket(total) },
+        extractor_timings_total: timings.empty? ? nil : Stats.bucket(timings.values.sum { |value| seconds(value) }),
         git_enrichment_state: enrichment(manifest['git_enrichment']) }
+    end
+
+    def seconds(value)
+      value.is_a?(Numeric) && value.finite? ? value.to_f : 0.0
     end
 
     def integer(value)
@@ -937,7 +1038,7 @@ module WoodsShapeProfile
     end
 
     # Sum a directory-keyed table; keys outside Woods' directories go to "other".
-    def bucketed(table)
+    def by_directory(table)
       return {} unless table.is_a?(Hash)
 
       table.each_with_object(Hash.new(0)) do |(key, value), result|
