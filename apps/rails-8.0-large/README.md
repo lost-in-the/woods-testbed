@@ -250,6 +250,13 @@ copied key or section it must be 0 or a power of two.
 A large measured value (the longest model, the biggest hub) is still emitted exactly: that is the point of the
 profile.
 
+File counts describe the application, not tooling mounted into it.
+A directory laid out like the testbed's shared scripts (`tools/woods_shape_profile.rb`, `support/` and
+`woods_smoke.rb`), which every variant mounts at `script/shared`, is skipped whole wherever it sits and counted only in
+`files.tooling_dirs_skipped`; a symlink is never followed, so nothing outside the application root is counted.
+An application's own `script/` directory is counted as usual, even with a copy of the profiler in it.
+In a Canopy container the mount added 99 Ruby files to the 163 of the application before this rule.
+
 Two profiles of Canopy are checked in under `shape/`: `canopy-base.json` (the
 committed app) and `canopy-scale-large.json` (after `SCALE=large
 generate_scale_app.rb`). Git history is reported as unavailable in a shallow

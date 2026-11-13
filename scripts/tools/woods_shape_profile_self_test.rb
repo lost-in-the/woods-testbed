@@ -112,11 +112,21 @@ def build_app(root)
     'packs/acme-corp/app/models/thing.rb' => "class Thing\nend\n",
     'spec/models/secret_ledger_spec.rb' => "# spec\n",
     'vendor/bundle/ignored.rb' => "# ignored\n",
+    # The app's own script/ directory is application code and is counted.
+    'script/backfill_ledgers.rb' => "# one\n# two\n",
+    # The testbed's shared scripts, mounted at script/shared in every variant: tooling, not the app.
+    'script/shared/woods_smoke.rb' => "# tooling\n", 'script/shared/support/session.rb' => "# tooling\n",
+    'script/shared/tools/woods_shape_profile.rb' => "# tooling\n",
     'Gemfile.lock' => "GEM\n  remote: https://acme-corp.example/\n  specs:\n    acme_private_gem (1.2.3)\n" \
                       "      rack (>= 2)\n    rack (3.0.0)\n\nDEPENDENCIES\n  acme_private_gem\n" }.each do |path, text|
     FileUtils.mkdir_p(File.dirname(File.join(root, path)))
     File.write(File.join(root, path), text)
   end
+  # A directory that resolves outside the application root is not the application either.
+  outside = File.join(File.dirname(root), 'outside-app')
+  FileUtils.mkdir_p(outside)
+  File.write(File.join(outside, 'elsewhere.rb'), "# outside\n")
+  File.symlink(outside, File.join(root, 'script/linked'))
 end
 
 def git_history(root)
@@ -271,6 +281,9 @@ def assert_numbers(doc, with_git)
   check('files', files.dig('ruby', 'app', 'count') == 2 && files.dig('ruby', 'lib', 'count') == 1 &&
                  files.dig('ruby', 'packages', 'count') == 1 && files['view_templates'] == 1 &&
                  files['test_files'] == 1 && files.dig('ruby', 'app', 'lines', 'max') == 4)
+  check('mounted tooling not counted, own scripts counted',
+        files.dig('ruby', 'elsewhere', 'count') == 1 && files.dig('ruby', 'elsewhere', 'lines', 'max') == 2 &&
+        files.dig('ruby', 'all', 'count') == 5 && files['tooling_dirs_skipped'] == 1)
   check('app weight', doc.dig('app_weight', 'gems_in_lockfile') == 2 &&
                       doc.dig('app_weight', 'rails_version') == '7.1.3.4' &&
                       doc.dig('app_weight', 'ruby_version').nil? &&

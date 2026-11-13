@@ -141,7 +141,7 @@ module WoodsShapeProfile
     sti_children concern_fan_in_top_10 concern_fan_in_top_10_all_units concerns_included_by_models
     tables indexes foreign_keys
     actions filters application_filters routes routes_per_controller routes_total_index routes_total_runtime
-    ruby app lib packages elsewhere lines view_templates test_files walk_truncated files_seen
+    ruby app lib packages elsewhere lines view_templates test_files walk_truncated files_seen tooling_dirs_skipped
     gems_in_lockfile gems_loaded ruby_version rails_version eager_load_configured engines initializers timings
     boot_seconds eager_load_seconds eager_boot_wall_seconds autoloaded_constants modules_defined_by_eager_load
     active_record_descendants
@@ -167,7 +167,7 @@ module WoodsShapeProfile
     top_level_namespaces root_units namespaced_units namespaced_edge_share cross_namespace_edge_share
     cross_namespace_edge_share_including_root strongly_connected_components largest_component units_in_components
     self_loops sti_children concerns_included_by_models concern_fan_in_top_10 concern_fan_in_top_10_all_units
-    routes_total_index routes_total_runtime files_seen view_templates test_files
+    routes_total_index routes_total_runtime files_seen view_templates test_files tooling_dirs_skipped
     gems_in_lockfile gems_loaded engines initializers boot_seconds eager_load_seconds eager_boot_wall_seconds
     modules_defined_by_eager_load autoloaded_constants active_record_descendants
     total_commits commits_last_365_days contributors commits_walked app_files_touched
@@ -824,11 +824,18 @@ module WoodsShapeProfile
     PACKAGE_ROOTS = %w[packs packages engines components gems].freeze
     TEST_DIRS = %w[spec test features].freeze
     LIMIT = 500_000
+    # The profile describes the application, not tooling mounted into it. The
+    # woods-testbed mounts its shared scripts directory at script/shared in
+    # every variant (a bind mount: a real directory, not a symlink). It is
+    # recognised by its layout, wherever it is mounted, and skipped whole; an
+    # application's own script/ directory, even one holding a copy of this
+    # profiler, lacks the layout and is counted.
+    TOOLING_LAYOUT = %w[tools/woods_shape_profile.rb support woods_smoke.rb].freeze
 
     def initialize(root)
       @root = root
       @lines = Hash.new { |hash, key| hash[key] = [] }
-      @views = @tests = @seen = 0
+      @views = @tests = @seen = @tooling = 0
       @truncated = false
     end
 
@@ -840,7 +847,8 @@ module WoodsShapeProfile
         ruby: %i[app lib packages elsewhere].to_h do |bucket|
           [bucket, { count: @lines[bucket].size, lines: Stats.dist(@lines[bucket], histogram: true) }]
         end.merge(all: { count: all_lines.size, lines: Stats.dist(all_lines, histogram: true) }),
-        view_templates: @views, test_files: @tests, files_seen: @seen, walk_truncated: @truncated }
+        view_templates: @views, test_files: @tests, files_seen: @seen, walk_truncated: @truncated,
+        tooling_dirs_skipped: @tooling }
     end
 
     private
@@ -859,15 +867,23 @@ module WoodsShapeProfile
         return @truncated = true if @seen >= LIMIT
 
         path = File.join(dir, name)
+        # A symlink can lead outside the application root; it is never followed.
         next if File.symlink?(path)
 
         if File.directory?(path)
-          walk(path, segments + [name]) unless segments.empty? && SKIP.include?(name)
+          next if segments.empty? && SKIP.include?(name)
+          next @tooling += 1 if tooling?(path)
+
+          walk(path, segments + [name])
         elsif File.file?(path)
           @seen += 1
           classify(path, name, segments)
         end
       end
+    end
+
+    def tooling?(dir)
+      TOOLING_LAYOUT.all? { |entry| File.exist?(File.join(dir, entry)) }
     end
 
     def classify(path, name, segments)
