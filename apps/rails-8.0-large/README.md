@@ -218,6 +218,9 @@ bin/rails runner path/to/woods_shape_profile.rb --timings --out shape.json
 The index directory defaults to `tmp/woods`; pass another as the first
 argument. `--timings` boots the app twice in child processes to time boot and
 eager load; leave it off to skip that.
+A child that fails is reported as `failed_child` (`boot` or `eager_load`), a `cause` (`nonzero_exit`, `signaled`,
+`timeout` after 15 minutes, `no_marker`, `command_not_found`, `spawn_failed`) and its `exit_status`; the child's own
+output is never copied, since an error message can name the application.
 It reads only files that resolve inside the index directory: a payload or unit file that is, or sits behind, a symlink
 out of it is skipped, and a generation marker naming a payload outside it (`../woods-old/...`) is refused.
 

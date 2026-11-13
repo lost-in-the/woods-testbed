@@ -64,7 +64,9 @@
 #   (line counts only), reads Gemfile.lock, and runs read-only `git` commands.
 #   It writes nothing except the file named by --out. `--timings` boots the
 #   application twice in child processes (`bin/rails runner`), which does
-#   whatever booting your app does (logs, bootsnap cache).
+#   whatever booting your app does (logs, bootsnap cache). A child is killed
+#   after CHILD_TIMEOUT seconds; a failure is reported by a fixed cause and the
+#   exit status, never by the child's output.
 
 require 'json'
 require 'open3'
@@ -114,7 +116,7 @@ module WoodsShapeProfile
   ENUMS = (%w[
     published_index direct full incremental refresh seed watch unknown available unavailable partial
     shallow git_unavailable not_a_repository no_app_root not_requested no_rails no_lockfile child_failed
-    missing unreadable
+    missing unreadable boot eager_load command_not_found spawn_failed nonzero_exit signaled timeout no_marker
   ] + [OTHER, UNLABELLED]).freeze
 
   VERSION_KEYS = %w[ruby_version rails_version woods_version].freeze
@@ -143,7 +145,8 @@ module WoodsShapeProfile
     gems_in_lockfile gems_loaded ruby_version rails_version eager_load_configured engines initializers timings
     boot_seconds eager_load_seconds eager_boot_wall_seconds autoloaded_constants modules_defined_by_eager_load
     active_record_descendants
-    reason total_commits commits_last_365_days contributors files_per_commit commits_per_app_file
+    reason failed_child cause exit_status
+    total_commits commits_last_365_days contributors files_per_commit commits_per_app_file
     commits_walked app_files_touched
     woods_version extraction_mode generation total_chunks units_by_directory extractor_timings
     extractor_timings_total git_enrichment_state
@@ -153,7 +156,8 @@ module WoodsShapeProfile
 
   # The keys whose value may be a number, or a list of numbers: quantities this
   # script measures itself (counts, sizes, line counts, ratios, durations, depths,
-  # ranks, bucket boundaries) and its own constants (profile_version, node_limit).
+  # ranks, bucket boundaries), its own constants (profile_version, node_limit),
+  # and the exit status of a failed `--timings` child (0-255, as the OS reports it).
   # A number under any other key is a leak.
   MEASURED_KEYS = %w[
     profile_version count min p50 p90 p99 max mean sum le total_units
@@ -167,6 +171,7 @@ module WoodsShapeProfile
     gems_in_lockfile gems_loaded engines initializers boot_seconds eager_load_seconds eager_boot_wall_seconds
     modules_defined_by_eager_load autoloaded_constants active_record_descendants
     total_commits commits_last_365_days contributors commits_walked app_files_touched
+    exit_status
   ].to_set.freeze
 
   # Numbers copied from index metadata rather than measured: Woods' own counts,
@@ -909,10 +914,16 @@ module WoodsShapeProfile
       puts ['#{MARKER}', elapsed.round(3), ObjectSpace.each_object(Module).count - before, expected, models].join(' ')
     RUBY
 
-    def initialize(root, manifest, timings:)
+    CHILD_TIMEOUT = 900
+
+    # @param ruby [String] the interpreter that runs bin/rails (the self-test points it elsewhere)
+    # @param child_timeout [Numeric] seconds before a child is killed and reported as `timeout`
+    def initialize(root, manifest, timings:, ruby: RbConfig.ruby, child_timeout: CHILD_TIMEOUT)
       @root = root
       @manifest = manifest
       @timings = timings
+      @ruby = ruby
+      @child_timeout = child_timeout
     end
 
     def to_h
@@ -948,11 +959,17 @@ module WoodsShapeProfile
       return { available: false, reason: 'not_requested' } unless @timings
       return { available: false, reason: 'no_rails' } unless rails && @root && File.file?(File.join(@root, 'bin/rails'))
 
-      boot, = run_child('nil')
-      wall, output = run_child(CHILD)
-      fields = output.to_s[/^#{MARKER} ([\d. -]+)$/, 1]&.split
-      return { available: false, reason: 'child_failed' } unless boot && wall && fields&.size == 4
+      boot = run_child('nil')
+      return child_failed('boot', boot) unless boot[:seconds]
 
+      eager = run_child(CHILD)
+      return child_failed('eager_load', eager) unless eager[:seconds]
+
+      fields = eager[:output][/^#{MARKER} ([\d. -]+)$/, 1]&.split
+      return child_failed('eager_load', cause: 'no_marker') unless fields&.size == 4
+
+      boot = boot[:seconds]
+      wall = eager[:seconds]
       # The child prints what this script's own code measured; a negative value
       # is its "could not measure" sentinel and is dropped.
       positive = ->(text) { text.to_i.negative? ? nil : text.to_i }
@@ -962,12 +979,48 @@ module WoodsShapeProfile
         autoloaded_constants: positive.call(fields[2]), active_record_descendants: positive.call(fields[3]) }
     end
 
+    # Which child failed and why, from a fixed vocabulary. The child's output
+    # is never part of it: an error message can name the application.
+    def child_failed(child, result)
+      { available: false, reason: 'child_failed', failed_child: child, cause: result[:cause],
+        exit_status: result[:exit_status] }
+    end
+
+    # @return [Hash] { seconds:, output: } on success, else { cause:, exit_status: }
     def run_child(code)
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      output, status = Open3.capture2e(RbConfig.ruby, 'bin/rails', 'runner', code, chdir: @root)
-      status.success? ? [Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, output] : nil
-    rescue SystemCallError
-      nil
+      Open3.popen2e(@ruby, 'bin/rails', 'runner', code, chdir: @root, pgroup: true) do |stdin, out, wait|
+        stdin.close
+        reader = Thread.new { out.read }
+        return stop(wait.pid, reader) unless wait.join(@child_timeout)
+
+        output = reader.value.to_s
+        status = wait.value
+        return { seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, output: output } if status.success?
+
+        exited(status)
+      end
+    rescue Errno::ENOENT, Errno::EACCES
+      { cause: 'command_not_found' }
+    rescue SystemCallError, IOError
+      { cause: 'spawn_failed' }
+    end
+
+    def exited(status)
+      return { cause: 'signaled', exit_status: 128 + status.termsig } if status.signaled?
+
+      { cause: 'nonzero_exit', exit_status: status.exitstatus }
+    end
+
+    # Kill the child's whole process group (bin/rails may fork) and stop reading its output.
+    def stop(pid, reader)
+      begin
+        Process.kill('KILL', -pid)
+      rescue SystemCallError
+        nil
+      end
+      reader.kill unless reader.join(5)
+      { cause: 'timeout' }
     end
   end
 
