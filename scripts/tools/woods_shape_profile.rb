@@ -744,7 +744,8 @@ module WoodsShapeProfile
     end
 
     def classify(path, name, segments)
-      if segments.intersect?(TEST_DIRS)
+      # Not Array#intersect?: that is Ruby 3.1, and this runs on Ruby 3.0 apps.
+      if segments.any? { |segment| TEST_DIRS.include?(segment) }
         @tests += 1 if name.end_with?('_spec.rb', '_test.rb', '.feature')
       elsif segments.each_cons(2).include?(%w[app views])
         @views += 1
@@ -1036,7 +1037,11 @@ module WoodsShapeProfile
     def row(label, left, right)
       return { label: label, a: left, b: right, ratio: 'n/a', gap: nil } unless left && right
       return { label: label, a: left, b: right, ratio: '1.00x', gap: 0.0 } if left == right
-      return { label: label, a: left, b: right, ratio: 'inf', gap: Float::MAX } if left.zero? || right.zero?
+      # The ratio shown is B / A, so the two zero cases read differently: B
+      # over a zero A is unbounded, a zero B is none of A. Both are the
+      # largest possible gap for sorting.
+      return { label: label, a: left, b: right, ratio: 'inf', gap: Float::MAX } if left.zero?
+      return { label: label, a: left, b: right, ratio: '0.00x', gap: Float::MAX } if right.zero?
 
       ratio = right.to_f / left
       { label: label, a: left, b: right, ratio: format('%.2fx', ratio), gap: Math.log(ratio).abs }

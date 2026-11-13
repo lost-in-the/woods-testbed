@@ -247,6 +247,14 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   assert_no_canaries(table, 'the comparison')
   check('comparison table', table.lines.size > 10 && table.match?(/^units\s+6\s+6\s+1\.00x$/))
 
+  # The ratio is B / A in both directions, zero included.
+  empty = File.join(tmp, 'empty.json')
+  File.write(empty, JSON.generate(flat.merge('index' => flat.fetch('index').merge('total_units' => 0))))
+  check('zero A reads as unbounded', profile('--compare', empty, out).match?(/^units\s+0\s+6\s+inf$/))
+  check('zero B reads as none of A', profile('--compare', out, empty).match?(/^units\s+6\s+0\s+0\.00x$/))
+  check('zero against zero is equal', profile('--compare', empty, empty).match?(/^units\s+0\s+0\s+1\.00x$/))
+  check('a zero side sorts first', profile('--compare', out, empty).lines[1].start_with?('units'))
+
   puts "PASS shape profile: no planted string emitted, numbers exact, self-check aborts on a bypass#{
     ' (git history skipped: git unavailable)' unless with_git}"
 end
