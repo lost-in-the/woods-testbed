@@ -25,6 +25,11 @@ CANARIES = %w[
   secret-branch deadbeefcafe acme-corp Skunkworks skunkworks_dir mystery_stat ruby-3.3.6-acme Fix\ the\ ledger
 ].freeze
 
+# An application-chosen number (an ID, a timestamp, a magic constant) planted in
+# index metadata. A number copied from metadata must never reach the profile:
+# measured quantities are emitted, copied ones only as log2 bucket boundaries.
+PLANTED_NUMBER = 1_094_929_733
+
 def check(label, condition)
   raise "FAIL #{label}" unless condition
 end
@@ -50,7 +55,7 @@ def build_index(payload)
                columns: [{ name: 'iban_number' }, { name: 'id' }])
   owner = unit('model', 'Zyxwv::Owner', 'app/models/zyxwv/owner.rb', "class Zyxwv::Owner\nend\n",
                table_name: 'qq_owners', inlined_concerns: ['Hushable'], associations: [], callbacks: [],
-               validations: [], scopes: [{ name: 'open_sesame' }], column_count: 3)
+               validations: [], scopes: [{ name: 'open_sesame' }], column_count: PLANTED_NUMBER)
   controller = unit('controller', 'VaultController', 'app/controllers/vault_controller.rb',
                     "class VaultController\nend",
                     actions: %w[show open_sesame], filters: [{ filter: 'open_sesame', origin: 'app' }],
@@ -86,7 +91,8 @@ def write_graph(payload)
   write_json(File.join(payload, 'graph_analysis.json'),
              hubs: [{ identifier: 'Zyxwv::SecretLedgerAccount', dependent_count: 2 }],
              cycles: [%w[Zyxwv::SecretLedgerAccount Zyxwv::Owner]],
-             stats: { cycle_count: 1, cycle_limit_reached: false, mystery_stat: 4, hub_count: 'Skunkworks' })
+             stats: { cycle_count: 1, cycle_limit_reached: false, mystery_stat: 4, hub_count: 'Skunkworks',
+                      orphan_count: PLANTED_NUMBER })
 end
 
 def write_manifest(payload)
@@ -94,7 +100,7 @@ def write_manifest(payload)
              woods_version: '2.1.0', rails_version: '7.1.3.4', ruby_version: 'ruby-3.3.6-acme',
              git_branch: 'feature/secret-branch', git_sha: 'deadbeefcafe', root: '/home/zebediah/acme-corp',
              counts: { models: 2, controllers: 1, routes: 1, concerns: 1, skunkworks_dir: 1 }, total_units: 6,
-             total_chunks: 0, extractor_timings: { models: 0.5, skunkworks_dir: 0.25 },
+             total_chunks: PLANTED_NUMBER, extractor_timings: { models: 0.5, skunkworks_dir: PLANTED_NUMBER / 1000.0 },
              git_enrichment: { state: 'Skunkworks' })
 end
 
@@ -134,6 +140,7 @@ end
 
 def assert_no_canaries(text, label)
   CANARIES.each { |canary| check("#{label} leaks a planted string", !text.downcase.include?(canary.downcase)) }
+  check("#{label} leaks a planted number", !text.include?(PLANTED_NUMBER.to_s[0, 7]))
 end
 
 def assert_numbers(doc, with_git)
@@ -152,11 +159,16 @@ def assert_numbers(doc, with_git)
   check('namespaces', graph.dig('namespaces', 'top_level_namespaces') == 1 &&
                       graph.dig('namespaces', 'root_units') == 4)
   check('cycle', graph.dig('cycles', 'largest_component') == 4)
-  check('analysis stats filtered', graph.dig('cycles', 'analysis') ==
-                                   { 'cycle_count' => 1, 'cycle_limit_reached' => false })
+  check('analysis stats filtered and bucketed', graph.dig('cycles', 'analysis') ==
+                                   { 'cycle_count' => 1, 'cycle_limit_reached' => false,
+                                     'orphan_count' => 2**31 })
   check('model facts', doc.dig('models', 'callbacks', 'max') == 2 &&
                        doc.dig('models', 'application_callbacks', 'max') == 1 &&
-                       doc.dig('models', 'columns', 'max') == 3 && doc.dig('models', 'concern_fan_in_top_10') == [2])
+                       doc.dig('models', 'concern_fan_in_top_10') == [2])
+  # The owner records only `column_count`: a count copied from metadata, not measured, so it is not used.
+  check('model columns measured, not copied',
+        doc.dig('models', 'columns') == { 'count' => 1, 'min' => 2, 'p50' => 2, 'p90' => 2, 'p99' => 2, 'max' => 2,
+                                          'mean' => 2.0, 'histogram' => [{ 'le' => 2, 'count' => 1 }] })
   check('controller facts', doc.dig('controllers', 'actions', 'max') == 2 &&
                             doc.dig('controllers', 'routes_total_index') == 1)
   files = doc['files']
@@ -169,8 +181,13 @@ def assert_numbers(doc, with_git)
                       doc.dig('app_weight', 'timings') == { 'available' => false, 'reason' => 'not_requested' })
   run = doc['woods_run']
   check('run facts', run['woods_version'] == '2.1.0' && run['extraction_mode'] == 'incremental' &&
-                     run['extractor_timings'] == { 'models' => 0.5, 'other' => 0.25 } &&
                      run['units_by_directory']['other'] == 1 && run['git_enrichment_state'] == 'other')
+  # Everything in woods_run is copied from the manifest, so it is emitted only as a log2 bucket boundary.
+  check('run facts bucketed', run['extractor_timings'] == { 'models' => 0.5, 'other' => 2.0**21 } &&
+                              run['total_units'] == 8 && run['total_chunks'] == 2**31 && run['generation'] == 4 &&
+                              run['units_by_directory'] == { 'concerns' => 1, 'controllers' => 1, 'models' => 2,
+                                                             'other' => 1, 'routes' => 1 } &&
+                              run['extractor_timings_total'] == 2.0**21)
   assert_history(doc['history'], with_git)
 end
 
@@ -203,7 +220,28 @@ def assert_self_check(doc)
   expect_leak('a nested string') { privacy.verify!(mutate.call { |d| d['graph']['top_hubs'] << ['Hushable'] }) }
   expect_leak('a bad version') { privacy.verify!(mutate.call { |d| d['woods_run']['woods_version'] = 'acme 1.0' }) }
   expect_leak('a version elsewhere') { privacy.verify!(mutate.call { |d| d['index']['reader'] = '2.1.0' }) }
+  assert_numeric_rule(privacy, mutate)
   assert_seal_aborts(doc)
+end
+
+# Numbers: only under a measured-quantity key or in a count table, never negative,
+# and only bucket boundaries where the value was copied from index metadata.
+def assert_numeric_rule(privacy, mutate)
+  expect_leak('a number under a non-numeric key') do
+    privacy.verify!(mutate.call { |d| d['graph']['available'] = PLANTED_NUMBER })
+  end
+  expect_leak('a number in place of a reason') do
+    privacy.verify!(mutate.call { |d| d['app_weight']['timings']['reason'] = PLANTED_NUMBER })
+  end
+  expect_leak('a negative count') { privacy.verify!(mutate.call { |d| d['index']['total_units'] = -3 }) }
+  expect_leak('a copied run fact') { privacy.verify!(mutate.call { |d| d['woods_run']['total_units'] = 6 }) }
+  expect_leak('a copied timing') do
+    privacy.verify!(mutate.call { |d| d['woods_run']['extractor_timings']['models'] = 0.3 })
+  end
+  expect_leak('a copied analysis count') do
+    privacy.verify!(mutate.call { |d| d['graph']['cycles']['analysis']['cycle_count'] = 3 })
+  end
+  check('a measured extreme passes', privacy.verify!(mutate.call { |d| d['index']['total_units'] = PLANTED_NUMBER }))
 end
 
 # Privacy.seal is what main prints through: a leak must exit non-zero and say nothing of the value.
