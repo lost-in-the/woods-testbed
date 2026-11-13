@@ -1,0 +1,2653 @@
+{
+  "profile_version": 1,
+  "index": {
+    "reader": "published_index",
+    "total_units": 568,
+    "units_by_type": {
+      "action_cable_channel": 2,
+      "caching": 1,
+      "component": 5,
+      "concern": 6,
+      "config_file": 4,
+      "configuration": 11,
+      "controller": 21,
+      "database_table": 43,
+      "database_view": 1,
+      "decorator": 1,
+      "doc": 1,
+      "engine": 4,
+      "event": 1,
+      "factory": 4,
+      "gem_source": 79,
+      "graphql_mutation": 1,
+      "graphql_query": 1,
+      "graphql_resolver": 1,
+      "graphql_type": 4,
+      "i18n": 1,
+      "job": 11,
+      "lib": 3,
+      "mailer": 3,
+      "manager": 1,
+      "middleware": 1,
+      "migration": 5,
+      "model": 46,
+      "policy": 4,
+      "poro": 7,
+      "pundit_policy": 3,
+      "rails_source": 119,
+      "rake_task": 6,
+      "route": 77,
+      "route_file": 3,
+      "scheduled_job": 4,
+      "serializer": 6,
+      "service": 17,
+      "state_machine": 2,
+      "test_mapping": 19,
+      "test_support": 3,
+      "validator": 1,
+      "view_component": 1,
+      "view_template": 34
+    },
+    "source_lines": {
+      "overall": {
+        "count": 568,
+        "min": 1,
+        "p50": 28,
+        "p90": 181,
+        "p99": 954,
+        "max": 2286,
+        "mean": 79.95,
+        "histogram": [
+          {
+            "le": 1,
+            "count": 15
+          },
+          {
+            "le": 2,
+            "count": 5
+          },
+          {
+            "le": 4,
+            "count": 17
+          },
+          {
+            "le": 8,
+            "count": 85
+          },
+          {
+            "le": 16,
+            "count": 55
+          },
+          {
+            "le": 32,
+            "count": 139
+          },
+          {
+            "le": 64,
+            "count": 87
+          },
+          {
+            "le": 128,
+            "count": 79
+          },
+          {
+            "le": 256,
+            "count": 47
+          },
+          {
+            "le": 512,
+            "count": 24
+          },
+          {
+            "le": 1024,
+            "count": 11
+          },
+          {
+            "le": 2048,
+            "count": 3
+          },
+          {
+            "le": 4096,
+            "count": 1
+          }
+        ]
+      },
+      "by_type": {
+        "action_cable_channel": {
+          "count": 2,
+          "min": 4,
+          "p50": 4,
+          "p90": 13,
+          "p99": 13,
+          "max": 13,
+          "mean": 8.5
+        },
+        "caching": {
+          "count": 1,
+          "min": 65,
+          "p50": 65,
+          "p90": 65,
+          "p99": 65,
+          "max": 65,
+          "mean": 65.0
+        },
+        "component": {
+          "count": 5,
+          "min": 4,
+          "p50": 10,
+          "p90": 16,
+          "p99": 16,
+          "max": 16,
+          "mean": 10.0
+        },
+        "concern": {
+          "count": 6,
+          "min": 16,
+          "p50": 20,
+          "p90": 36,
+          "p99": 36,
+          "max": 36,
+          "mean": 24.0
+        },
+        "config_file": {
+          "count": 4,
+          "min": 5,
+          "p50": 6,
+          "p90": 17,
+          "p99": 17,
+          "max": 17,
+          "mean": 10.75
+        },
+        "configuration": {
+          "count": 11,
+          "min": 8,
+          "p50": 15,
+          "p90": 22,
+          "p99": 56,
+          "max": 56,
+          "mean": 17.64
+        },
+        "controller": {
+          "count": 21,
+          "min": 33,
+          "p50": 63,
+          "p90": 83,
+          "p99": 125,
+          "max": 125,
+          "mean": 63.76
+        },
+        "database_table": {
+          "count": 43,
+          "min": 11,
+          "p50": 21,
+          "p90": 26,
+          "p99": 30,
+          "max": 30,
+          "mean": 20.84
+        },
+        "database_view": {
+          "count": 1,
+          "min": 17,
+          "p50": 17,
+          "p90": 17,
+          "p99": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "decorator": {
+          "count": 1,
+          "min": 22,
+          "p50": 22,
+          "p90": 22,
+          "p99": 22,
+          "max": 22,
+          "mean": 22.0
+        },
+        "doc": {
+          "count": 1,
+          "min": 204,
+          "p50": 204,
+          "p90": 204,
+          "p99": 204,
+          "max": 204,
+          "mean": 204.0
+        },
+        "engine": {
+          "count": 4,
+          "min": 6,
+          "p50": 6,
+          "p90": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 6.0
+        },
+        "event": {
+          "count": 1,
+          "min": 3,
+          "p50": 3,
+          "p90": 3,
+          "p99": 3,
+          "max": 3,
+          "mean": 3.0
+        },
+        "factory": {
+          "count": 4,
+          "min": 28,
+          "p50": 28,
+          "p90": 28,
+          "p99": 28,
+          "max": 28,
+          "mean": 28.0
+        },
+        "gem_source": {
+          "count": 79,
+          "min": 9,
+          "p50": 72,
+          "p90": 271,
+          "p99": 639,
+          "max": 639,
+          "mean": 105.04
+        },
+        "graphql_mutation": {
+          "count": 1,
+          "min": 20,
+          "p50": 20,
+          "p90": 20,
+          "p99": 20,
+          "max": 20,
+          "mean": 20.0
+        },
+        "graphql_query": {
+          "count": 1,
+          "min": 21,
+          "p50": 21,
+          "p90": 21,
+          "p99": 21,
+          "max": 21,
+          "mean": 21.0
+        },
+        "graphql_resolver": {
+          "count": 1,
+          "min": 17,
+          "p50": 17,
+          "p90": 17,
+          "p99": 17,
+          "max": 17,
+          "mean": 17.0
+        },
+        "graphql_type": {
+          "count": 4,
+          "min": 10,
+          "p50": 11,
+          "p90": 21,
+          "p99": 21,
+          "max": 21,
+          "mean": 15.5
+        },
+        "i18n": {
+          "count": 1,
+          "min": 8,
+          "p50": 8,
+          "p90": 8,
+          "p99": 8,
+          "max": 8,
+          "mean": 8.0
+        },
+        "job": {
+          "count": 11,
+          "min": 9,
+          "p50": 16,
+          "p90": 20,
+          "p99": 21,
+          "max": 21,
+          "mean": 16.45
+        },
+        "lib": {
+          "count": 3,
+          "min": 15,
+          "p50": 33,
+          "p90": 272,
+          "p99": 272,
+          "max": 272,
+          "mean": 106.67
+        },
+        "mailer": {
+          "count": 3,
+          "min": 11,
+          "p50": 14,
+          "p90": 16,
+          "p99": 16,
+          "max": 16,
+          "mean": 13.67
+        },
+        "manager": {
+          "count": 1,
+          "min": 24,
+          "p50": 24,
+          "p90": 24,
+          "p99": 24,
+          "max": 24,
+          "mean": 24.0
+        },
+        "middleware": {
+          "count": 1,
+          "min": 30,
+          "p50": 30,
+          "p90": 30,
+          "p99": 30,
+          "max": 30,
+          "mean": 30.0
+        },
+        "migration": {
+          "count": 5,
+          "min": 19,
+          "p50": 46,
+          "p90": 180,
+          "p99": 180,
+          "max": 180,
+          "mean": 82.2
+        },
+        "model": {
+          "count": 46,
+          "min": 20,
+          "p50": 36,
+          "p90": 85,
+          "p99": 107,
+          "max": 107,
+          "mean": 44.93
+        },
+        "policy": {
+          "count": 4,
+          "min": 19,
+          "p50": 20,
+          "p90": 42,
+          "p99": 42,
+          "max": 42,
+          "mean": 26.75
+        },
+        "poro": {
+          "count": 7,
+          "min": 9,
+          "p50": 18,
+          "p90": 22,
+          "p99": 22,
+          "max": 22,
+          "mean": 17.14
+        },
+        "pundit_policy": {
+          "count": 3,
+          "min": 19,
+          "p50": 20,
+          "p90": 42,
+          "p99": 42,
+          "max": 42,
+          "mean": 27.0
+        },
+        "rails_source": {
+          "count": 119,
+          "min": 23,
+          "p50": 135,
+          "p90": 541,
+          "p99": 1544,
+          "max": 2286,
+          "mean": 230.33
+        },
+        "rake_task": {
+          "count": 6,
+          "min": 20,
+          "p50": 35,
+          "p90": 35,
+          "p99": 35,
+          "max": 35,
+          "mean": 30.0
+        },
+        "route": {
+          "count": 77,
+          "min": 4,
+          "p50": 6,
+          "p90": 6,
+          "p99": 6,
+          "max": 6,
+          "mean": 5.57
+        },
+        "route_file": {
+          "count": 3,
+          "min": 10,
+          "p50": 19,
+          "p90": 38,
+          "p99": 38,
+          "max": 38,
+          "mean": 22.33
+        },
+        "scheduled_job": {
+          "count": 4,
+          "min": 14,
+          "p50": 14,
+          "p90": 14,
+          "p99": 14,
+          "max": 14,
+          "mean": 14.0
+        },
+        "serializer": {
+          "count": 6,
+          "min": 16,
+          "p50": 20,
+          "p90": 34,
+          "p99": 34,
+          "max": 34,
+          "mean": 23.33
+        },
+        "service": {
+          "count": 17,
+          "min": 14,
+          "p50": 30,
+          "p90": 54,
+          "p99": 61,
+          "max": 61,
+          "mean": 32.53
+        },
+        "state_machine": {
+          "count": 2,
+          "min": 35,
+          "p50": 35,
+          "p90": 42,
+          "p99": 42,
+          "max": 42,
+          "mean": 38.5
+        },
+        "test_mapping": {
+          "count": 19,
+          "min": 13,
+          "p50": 63,
+          "p90": 151,
+          "p99": 157,
+          "max": 157,
+          "mean": 71.79
+        },
+        "test_support": {
+          "count": 3,
+          "min": 14,
+          "p50": 29,
+          "p90": 31,
+          "p99": 31,
+          "max": 31,
+          "mean": 24.67
+        },
+        "validator": {
+          "count": 1,
+          "min": 16,
+          "p50": 16,
+          "p90": 16,
+          "p99": 16,
+          "max": 16,
+          "mean": 16.0
+        },
+        "view_component": {
+          "count": 1,
+          "min": 11,
+          "p50": 11,
+          "p90": 11,
+          "p99": 11,
+          "max": 11,
+          "mean": 11.0
+        },
+        "view_template": {
+          "count": 34,
+          "min": 1,
+          "p50": 2,
+          "p90": 4,
+          "p99": 23,
+          "max": 23,
+          "mean": 2.85
+        }
+      }
+    },
+    "source_bytes": {
+      "overall": {
+        "count": 568,
+        "min": 13,
+        "p50": 1241,
+        "p90": 6625,
+        "p99": 31760,
+        "max": 81575,
+        "mean": 3133.7,
+        "histogram": [
+          {
+            "le": 16,
+            "count": 1
+          },
+          {
+            "le": 64,
+            "count": 3
+          },
+          {
+            "le": 128,
+            "count": 9
+          },
+          {
+            "le": 256,
+            "count": 85
+          },
+          {
+            "le": 512,
+            "count": 23
+          },
+          {
+            "le": 1024,
+            "count": 108
+          },
+          {
+            "le": 2048,
+            "count": 140
+          },
+          {
+            "le": 4096,
+            "count": 97
+          },
+          {
+            "le": 8192,
+            "count": 58
+          },
+          {
+            "le": 16384,
+            "count": 27
+          },
+          {
+            "le": 32768,
+            "count": 12
+          },
+          {
+            "le": 65536,
+            "count": 4
+          },
+          {
+            "le": 131072,
+            "count": 1
+          }
+        ]
+      },
+      "by_type": {
+        "action_cable_channel": {
+          "count": 2,
+          "min": 79,
+          "p50": 79,
+          "p90": 375,
+          "p99": 375,
+          "max": 375,
+          "mean": 227.0
+        },
+        "caching": {
+          "count": 1,
+          "min": 3439,
+          "p50": 3439,
+          "p90": 3439,
+          "p99": 3439,
+          "max": 3439,
+          "mean": 3439.0
+        },
+        "component": {
+          "count": 5,
+          "min": 125,
+          "p50": 218,
+          "p90": 534,
+          "p99": 534,
+          "max": 534,
+          "mean": 278.0
+        },
+        "concern": {
+          "count": 6,
+          "min": 927,
+          "p50": 1081,
+          "p90": 1421,
+          "p99": 1421,
+          "max": 1421,
+          "mean": 1146.83
+        },
+        "config_file": {
+          "count": 4,
+          "min": 148,
+          "p50": 168,
+          "p90": 538,
+          "p99": 538,
+          "max": 538,
+          "mean": 300.0
+        },
+        "configuration": {
+          "count": 11,
+          "min": 495,
+          "p50": 796,
+          "p90": 1189,
+          "p99": 3194,
+          "max": 3194,
+          "mean": 1073.73
+        },
+        "controller": {
+          "count": 21,
+          "min": 1850,
+          "p50": 3473,
+          "p90": 4679,
+          "p99": 7098,
+          "max": 7098,
+          "mean": 3614.52
+        },
+        "database_table": {
+          "count": 43,
+          "min": 351,
+          "p50": 732,
+          "p90": 1025,
+          "p99": 1249,
+          "max": 1249,
+          "mean": 744.93
+        },
+        "database_view": {
+          "count": 1,
+          "min": 1178,
+          "p50": 1178,
+          "p90": 1178,
+          "p99": 1178,
+          "max": 1178,
+          "mean": 1178.0
+        },
+        "decorator": {
+          "count": 1,
+          "min": 1093,
+          "p50": 1093,
+          "p90": 1093,
+          "p99": 1093,
+          "max": 1093,
+          "mean": 1093.0
+        },
+        "doc": {
+          "count": 1,
+          "min": 11011,
+          "p50": 11011,
+          "p90": 11011,
+          "p99": 11011,
+          "max": 11011,
+          "mean": 11011.0
+        },
+        "engine": {
+          "count": 4,
+          "min": 196,
+          "p50": 198,
+          "p90": 205,
+          "p99": 205,
+          "max": 205,
+          "mean": 199.5
+        },
+        "event": {
+          "count": 1,
+          "min": 174,
+          "p50": 174,
+          "p90": 174,
+          "p99": 174,
+          "max": 174,
+          "mean": 174.0
+        },
+        "factory": {
+          "count": 4,
+          "min": 831,
+          "p50": 833,
+          "p90": 843,
+          "p99": 843,
+          "max": 843,
+          "mean": 837.0
+        },
+        "gem_source": {
+          "count": 79,
+          "min": 632,
+          "p50": 2448,
+          "p90": 8057,
+          "p99": 24134,
+          "max": 24134,
+          "mean": 3478.43
+        },
+        "graphql_mutation": {
+          "count": 1,
+          "min": 1260,
+          "p50": 1260,
+          "p90": 1260,
+          "p99": 1260,
+          "max": 1260,
+          "mean": 1260.0
+        },
+        "graphql_query": {
+          "count": 1,
+          "min": 1194,
+          "p50": 1194,
+          "p90": 1194,
+          "p99": 1194,
+          "max": 1194,
+          "mean": 1194.0
+        },
+        "graphql_resolver": {
+          "count": 1,
+          "min": 1112,
+          "p50": 1112,
+          "p90": 1112,
+          "p99": 1112,
+          "max": 1112,
+          "mean": 1112.0
+        },
+        "graphql_type": {
+          "count": 4,
+          "min": 701,
+          "p50": 737,
+          "p90": 1014,
+          "p99": 1014,
+          "max": 1014,
+          "mean": 860.75
+        },
+        "i18n": {
+          "count": 1,
+          "min": 115,
+          "p50": 115,
+          "p90": 115,
+          "p99": 115,
+          "max": 115,
+          "mean": 115.0
+        },
+        "job": {
+          "count": 11,
+          "min": 720,
+          "p50": 1025,
+          "p90": 1119,
+          "p99": 1180,
+          "max": 1180,
+          "mean": 991.55
+        },
+        "lib": {
+          "count": 3,
+          "min": 965,
+          "p50": 1554,
+          "p90": 17889,
+          "p99": 17889,
+          "max": 17889,
+          "mean": 6802.67
+        },
+        "mailer": {
+          "count": 3,
+          "min": 785,
+          "p50": 875,
+          "p90": 1061,
+          "p99": 1061,
+          "max": 1061,
+          "mean": 907.0
+        },
+        "manager": {
+          "count": 1,
+          "min": 1205,
+          "p50": 1205,
+          "p90": 1205,
+          "p99": 1205,
+          "max": 1205,
+          "mean": 1205.0
+        },
+        "middleware": {
+          "count": 1,
+          "min": 1755,
+          "p50": 1755,
+          "p90": 1755,
+          "p99": 1755,
+          "max": 1755,
+          "mean": 1755.0
+        },
+        "migration": {
+          "count": 5,
+          "min": 1284,
+          "p50": 1819,
+          "p90": 8926,
+          "p99": 8926,
+          "max": 8926,
+          "mean": 3996.0
+        },
+        "model": {
+          "count": 46,
+          "min": 519,
+          "p50": 1428,
+          "p90": 3610,
+          "p99": 4490,
+          "max": 4490,
+          "mean": 1857.22
+        },
+        "policy": {
+          "count": 4,
+          "min": 1000,
+          "p50": 1161,
+          "p90": 1357,
+          "p99": 1357,
+          "max": 1357,
+          "mean": 1181.25
+        },
+        "poro": {
+          "count": 7,
+          "min": 778,
+          "p50": 1071,
+          "p90": 1335,
+          "p99": 1335,
+          "max": 1335,
+          "mean": 1068.0
+        },
+        "pundit_policy": {
+          "count": 3,
+          "min": 1161,
+          "p50": 1205,
+          "p90": 1357,
+          "p99": 1357,
+          "max": 1357,
+          "mean": 1241.0
+        },
+        "rails_source": {
+          "count": 119,
+          "min": 895,
+          "p50": 5344,
+          "p90": 21792,
+          "p99": 58654,
+          "max": 81575,
+          "mean": 8635.61
+        },
+        "rake_task": {
+          "count": 6,
+          "min": 932,
+          "p50": 1896,
+          "p90": 1922,
+          "p99": 1922,
+          "max": 1922,
+          "mean": 1586.33
+        },
+        "route": {
+          "count": 77,
+          "min": 87,
+          "p50": 168,
+          "p90": 215,
+          "p99": 267,
+          "max": 267,
+          "mean": 171.14
+        },
+        "route_file": {
+          "count": 3,
+          "min": 290,
+          "p50": 507,
+          "p90": 1212,
+          "p99": 1212,
+          "max": 1212,
+          "mean": 669.67
+        },
+        "scheduled_job": {
+          "count": 4,
+          "min": 444,
+          "p50": 444,
+          "p90": 444,
+          "p99": 444,
+          "max": 444,
+          "mean": 444.0
+        },
+        "serializer": {
+          "count": 6,
+          "min": 933,
+          "p50": 1026,
+          "p90": 1380,
+          "p99": 1380,
+          "max": 1380,
+          "mean": 1096.67
+        },
+        "service": {
+          "count": 17,
+          "min": 936,
+          "p50": 1827,
+          "p90": 2706,
+          "p99": 2898,
+          "max": 2898,
+          "mean": 1731.71
+        },
+        "state_machine": {
+          "count": 2,
+          "min": 942,
+          "p50": 942,
+          "p90": 1321,
+          "p99": 1321,
+          "max": 1321,
+          "mean": 1131.5
+        },
+        "test_mapping": {
+          "count": 19,
+          "min": 353,
+          "p50": 2615,
+          "p90": 7104,
+          "p99": 8905,
+          "max": 8905,
+          "mean": 3374.84
+        },
+        "test_support": {
+          "count": 3,
+          "min": 457,
+          "p50": 1629,
+          "p90": 1760,
+          "p99": 1760,
+          "max": 1760,
+          "mean": 1282.0
+        },
+        "validator": {
+          "count": 1,
+          "min": 959,
+          "p50": 959,
+          "p90": 959,
+          "p99": 959,
+          "max": 959,
+          "mean": 959.0
+        },
+        "view_component": {
+          "count": 1,
+          "min": 282,
+          "p50": 282,
+          "p90": 282,
+          "p99": 282,
+          "max": 282,
+          "mean": 282.0
+        },
+        "view_template": {
+          "count": 34,
+          "min": 13,
+          "p50": 668,
+          "p90": 1628,
+          "p99": 2770,
+          "max": 2770,
+          "mean": 804.79
+        }
+      }
+    },
+    "metadata_bytes": {
+      "overall": {
+        "count": 568,
+        "min": 153,
+        "p50": 746,
+        "p90": 4158,
+        "p99": 10726,
+        "max": 19276,
+        "mean": 1553.89,
+        "histogram": [
+          {
+            "le": 256,
+            "count": 93
+          },
+          {
+            "le": 512,
+            "count": 112
+          },
+          {
+            "le": 1024,
+            "count": 148
+          },
+          {
+            "le": 2048,
+            "count": 114
+          },
+          {
+            "le": 4096,
+            "count": 44
+          },
+          {
+            "le": 8192,
+            "count": 43
+          },
+          {
+            "le": 16384,
+            "count": 12
+          },
+          {
+            "le": 32768,
+            "count": 2
+          }
+        ]
+      },
+      "by_type": {
+        "action_cable_channel": {
+          "count": 2,
+          "min": 213,
+          "p50": 213,
+          "p90": 666,
+          "p99": 666,
+          "max": 666,
+          "mean": 439.5
+        },
+        "caching": {
+          "count": 1,
+          "min": 254,
+          "p50": 254,
+          "p90": 254,
+          "p99": 254,
+          "max": 254,
+          "mean": 254.0
+        },
+        "component": {
+          "count": 5,
+          "min": 434,
+          "p50": 706,
+          "p90": 1250,
+          "p99": 1250,
+          "max": 1250,
+          "mean": 796.0
+        },
+        "concern": {
+          "count": 6,
+          "min": 439,
+          "p50": 798,
+          "p90": 1006,
+          "p99": 1006,
+          "max": 1006,
+          "mean": 799.33
+        },
+        "config_file": {
+          "count": 4,
+          "min": 399,
+          "p50": 423,
+          "p90": 877,
+          "p99": 877,
+          "max": 877,
+          "mean": 593.75
+        },
+        "configuration": {
+          "count": 11,
+          "min": 158,
+          "p50": 207,
+          "p90": 760,
+          "p99": 1341,
+          "max": 1341,
+          "mean": 376.91
+        },
+        "controller": {
+          "count": 21,
+          "min": 2486,
+          "p50": 6124,
+          "p90": 9525,
+          "p99": 18233,
+          "max": 18233,
+          "mean": 6283.38
+        },
+        "database_table": {
+          "count": 43,
+          "min": 757,
+          "p50": 1596,
+          "p90": 2151,
+          "p99": 2651,
+          "max": 2651,
+          "mean": 1583.84
+        },
+        "database_view": {
+          "count": 1,
+          "min": 279,
+          "p50": 279,
+          "p90": 279,
+          "p99": 279,
+          "max": 279,
+          "mean": 279.0
+        },
+        "decorator": {
+          "count": 1,
+          "min": 836,
+          "p50": 836,
+          "p90": 836,
+          "p99": 836,
+          "max": 836,
+          "mean": 836.0
+        },
+        "doc": {
+          "count": 1,
+          "min": 4930,
+          "p50": 4930,
+          "p90": 4930,
+          "p99": 4930,
+          "max": 4930,
+          "mean": 4930.0
+        },
+        "engine": {
+          "count": 4,
+          "min": 243,
+          "p50": 244,
+          "p90": 715,
+          "p99": 715,
+          "max": 715,
+          "mean": 362.5
+        },
+        "event": {
+          "count": 1,
+          "min": 322,
+          "p50": 322,
+          "p90": 322,
+          "p99": 322,
+          "max": 322,
+          "mean": 322.0
+        },
+        "factory": {
+          "count": 4,
+          "min": 238,
+          "p50": 246,
+          "p90": 248,
+          "p99": 248,
+          "max": 248,
+          "mean": 244.5
+        },
+        "gem_source": {
+          "count": 79,
+          "min": 252,
+          "p50": 531,
+          "p90": 1428,
+          "p99": 8183,
+          "max": 8183,
+          "mean": 768.94
+        },
+        "graphql_mutation": {
+          "count": 1,
+          "min": 1151,
+          "p50": 1151,
+          "p90": 1151,
+          "p99": 1151,
+          "max": 1151,
+          "mean": 1151.0
+        },
+        "graphql_query": {
+          "count": 1,
+          "min": 1556,
+          "p50": 1556,
+          "p90": 1556,
+          "p99": 1556,
+          "max": 1556,
+          "mean": 1556.0
+        },
+        "graphql_resolver": {
+          "count": 1,
+          "min": 767,
+          "p50": 767,
+          "p90": 767,
+          "p99": 767,
+          "max": 767,
+          "mean": 767.0
+        },
+        "graphql_type": {
+          "count": 4,
+          "min": 452,
+          "p50": 683,
+          "p90": 1105,
+          "p99": 1105,
+          "max": 1105,
+          "mean": 817.0
+        },
+        "i18n": {
+          "count": 1,
+          "min": 153,
+          "p50": 153,
+          "p90": 153,
+          "p99": 153,
+          "max": 153,
+          "mean": 153.0
+        },
+        "job": {
+          "count": 11,
+          "min": 453,
+          "p50": 1070,
+          "p90": 1197,
+          "p99": 1471,
+          "max": 1471,
+          "mean": 1016.91
+        },
+        "lib": {
+          "count": 3,
+          "min": 411,
+          "p50": 1077,
+          "p90": 8585,
+          "p99": 8585,
+          "max": 8585,
+          "mean": 3357.67
+        },
+        "mailer": {
+          "count": 3,
+          "min": 351,
+          "p50": 1101,
+          "p90": 1122,
+          "p99": 1122,
+          "max": 1122,
+          "mean": 858.0
+        },
+        "manager": {
+          "count": 1,
+          "min": 1038,
+          "p50": 1038,
+          "p90": 1038,
+          "p99": 1038,
+          "max": 1038,
+          "mean": 1038.0
+        },
+        "middleware": {
+          "count": 1,
+          "min": 3346,
+          "p50": 3346,
+          "p90": 3346,
+          "p99": 3346,
+          "max": 3346,
+          "mean": 3346.0
+        },
+        "migration": {
+          "count": 5,
+          "min": 625,
+          "p50": 1451,
+          "p90": 7497,
+          "p99": 7497,
+          "max": 7497,
+          "mean": 3472.2
+        },
+        "model": {
+          "count": 46,
+          "min": 2696,
+          "p50": 5921,
+          "p90": 10726,
+          "p99": 19276,
+          "max": 19276,
+          "mean": 6429.15
+        },
+        "policy": {
+          "count": 4,
+          "min": 1095,
+          "p50": 1190,
+          "p90": 1547,
+          "p99": 1547,
+          "max": 1547,
+          "mean": 1310.0
+        },
+        "poro": {
+          "count": 7,
+          "min": 259,
+          "p50": 604,
+          "p90": 1470,
+          "p99": 1470,
+          "max": 1470,
+          "mean": 671.14
+        },
+        "pundit_policy": {
+          "count": 3,
+          "min": 1145,
+          "p50": 1378,
+          "p90": 1648,
+          "p99": 1648,
+          "max": 1648,
+          "mean": 1390.33
+        },
+        "rails_source": {
+          "count": 119,
+          "min": 325,
+          "p50": 697,
+          "p90": 1488,
+          "p99": 4575,
+          "max": 5113,
+          "mean": 889.05
+        },
+        "rake_task": {
+          "count": 6,
+          "min": 395,
+          "p50": 421,
+          "p90": 446,
+          "p99": 446,
+          "max": 446,
+          "mean": 422.5
+        },
+        "route": {
+          "count": 77,
+          "min": 173,
+          "p50": 217,
+          "p90": 241,
+          "p99": 279,
+          "max": 279,
+          "mean": 218.44
+        },
+        "route_file": {
+          "count": 3,
+          "min": 578,
+          "p50": 972,
+          "p90": 2556,
+          "p99": 2556,
+          "max": 2556,
+          "mean": 1368.67
+        },
+        "scheduled_job": {
+          "count": 4,
+          "min": 277,
+          "p50": 282,
+          "p90": 288,
+          "p99": 288,
+          "max": 288,
+          "mean": 282.5
+        },
+        "serializer": {
+          "count": 6,
+          "min": 712,
+          "p50": 906,
+          "p90": 1542,
+          "p99": 1542,
+          "max": 1542,
+          "mean": 1077.0
+        },
+        "service": {
+          "count": 17,
+          "min": 563,
+          "p50": 1240,
+          "p90": 2120,
+          "p99": 2129,
+          "max": 2129,
+          "mean": 1296.35
+        },
+        "state_machine": {
+          "count": 2,
+          "min": 416,
+          "p50": 416,
+          "p90": 621,
+          "p99": 621,
+          "max": 621,
+          "mean": 518.5
+        },
+        "test_mapping": {
+          "count": 19,
+          "min": 798,
+          "p50": 2017,
+          "p90": 4170,
+          "p99": 6360,
+          "max": 6360,
+          "mean": 2323.05
+        },
+        "test_support": {
+          "count": 3,
+          "min": 339,
+          "p50": 342,
+          "p90": 426,
+          "p99": 426,
+          "max": 426,
+          "mean": 369.0
+        },
+        "validator": {
+          "count": 1,
+          "min": 606,
+          "p50": 606,
+          "p90": 606,
+          "p99": 606,
+          "max": 606,
+          "mean": 606.0
+        },
+        "view_component": {
+          "count": 1,
+          "min": 795,
+          "p50": 795,
+          "p90": 795,
+          "p99": 795,
+          "max": 795,
+          "mean": 795.0
+        },
+        "view_template": {
+          "count": 34,
+          "min": 253,
+          "p50": 667,
+          "p90": 1347,
+          "p99": 2342,
+          "max": 2342,
+          "mean": 814.38
+        }
+      }
+    },
+    "chunks_per_unit": {
+      "count": 568,
+      "min": 0,
+      "p50": 0,
+      "p90": 3,
+      "p99": 5,
+      "max": 10,
+      "mean": 0.47,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 498
+        },
+        {
+          "le": 1,
+          "count": 6
+        },
+        {
+          "le": 2,
+          "count": 5
+        },
+        {
+          "le": 4,
+          "count": 48
+        },
+        {
+          "le": 8,
+          "count": 10
+        },
+        {
+          "le": 16,
+          "count": 1
+        }
+      ]
+    },
+    "unit_file_bytes": {
+      "count": 568,
+      "min": 685,
+      "p50": 3761,
+      "p90": 16688,
+      "p99": 44633,
+      "max": 86393,
+      "mean": 6924.45,
+      "histogram": [
+        {
+          "le": 1024,
+          "count": 32
+        },
+        {
+          "le": 2048,
+          "count": 105
+        },
+        {
+          "le": 4096,
+          "count": 166
+        },
+        {
+          "le": 8192,
+          "count": 128
+        },
+        {
+          "le": 16384,
+          "count": 78
+        },
+        {
+          "le": 32768,
+          "count": 46
+        },
+        {
+          "le": 65536,
+          "count": 11
+        },
+        {
+          "le": 131072,
+          "count": 2
+        }
+      ]
+    }
+  },
+  "graph": {
+    "available": true,
+    "nodes": 565,
+    "edges": 1010,
+    "edges_per_node": 1.7876,
+    "resolved_edges": 978,
+    "unresolved_edge_share": 0.0317,
+    "variant_records": 3,
+    "edges_by_via": {
+      "code_reference": 185,
+      "route_dispatch": 76,
+      "belongs_to": 68,
+      "drawn_in": 66,
+      "foreign_key": 62,
+      "has_many": 57,
+      "migrates": 53,
+      "inheritance": 49,
+      "table_name": 49,
+      "table": 46,
+      "link_to": 45,
+      "include": 38,
+      "exercises_route": 34,
+      "view_render": 30,
+      "documents": 23,
+      "form_action": 16,
+      "render": 16,
+      "redirect_to": 12,
+      "engine_route": 9,
+      "test_coverage": 9,
+      "helper_method": 7,
+      "job_enqueue": 7,
+      "policy_evaluation": 6,
+      "reference": 6,
+      "type_reference": 5,
+      "factory_for": 4,
+      "has_one": 4,
+      "scheduled": 4,
+      "task_invoke": 4,
+      "authorization": 3,
+      "draw": 2,
+      "field_resolver": 2,
+      "includes_helper": 2,
+      "state_machine": 2,
+      "subscribed_by": 2,
+      "view_source": 2,
+      "behavioral_profile": 1,
+      "decoration": 1,
+      "delegation": 1,
+      "published_by": 1,
+      "state_machine_callback": 1
+    },
+    "out_degree": {
+      "all": {
+        "count": 565,
+        "min": 0,
+        "p50": 1,
+        "p90": 4,
+        "p99": 13,
+        "max": 54,
+        "mean": 1.64,
+        "histogram": [
+          {
+            "le": 0,
+            "count": 271
+          },
+          {
+            "le": 1,
+            "count": 67
+          },
+          {
+            "le": 2,
+            "count": 123
+          },
+          {
+            "le": 4,
+            "count": 61
+          },
+          {
+            "le": 8,
+            "count": 33
+          },
+          {
+            "le": 16,
+            "count": 5
+          },
+          {
+            "le": 32,
+            "count": 4
+          },
+          {
+            "le": 64,
+            "count": 1
+          }
+        ]
+      },
+      "model": {
+        "count": 46,
+        "min": 2,
+        "p50": 4,
+        "p90": 7,
+        "p99": 13,
+        "max": 13,
+        "mean": 4.67
+      },
+      "controller": {
+        "count": 21,
+        "min": 2,
+        "p50": 4,
+        "p90": 7,
+        "p99": 9,
+        "max": 9,
+        "mean": 4.81
+      },
+      "service": {
+        "count": 17,
+        "min": 0,
+        "p50": 2,
+        "p90": 5,
+        "p99": 5,
+        "max": 5,
+        "mean": 2.12
+      },
+      "job": {
+        "count": 11,
+        "min": 0,
+        "p50": 3,
+        "p90": 3,
+        "p99": 4,
+        "max": 4,
+        "mean": 2.64
+      }
+    },
+    "in_degree": {
+      "all": {
+        "count": 565,
+        "min": 0,
+        "p50": 0,
+        "p90": 4,
+        "p99": 20,
+        "max": 48,
+        "mean": 1.64,
+        "histogram": [
+          {
+            "le": 0,
+            "count": 350
+          },
+          {
+            "le": 1,
+            "count": 65
+          },
+          {
+            "le": 2,
+            "count": 40
+          },
+          {
+            "le": 4,
+            "count": 55
+          },
+          {
+            "le": 8,
+            "count": 27
+          },
+          {
+            "le": 16,
+            "count": 21
+          },
+          {
+            "le": 32,
+            "count": 5
+          },
+          {
+            "le": 64,
+            "count": 2
+          }
+        ]
+      },
+      "model": {
+        "count": 46,
+        "min": 1,
+        "p50": 5,
+        "p90": 14,
+        "p99": 44,
+        "max": 44,
+        "mean": 6.72
+      },
+      "controller": {
+        "count": 21,
+        "min": 1,
+        "p50": 7,
+        "p90": 11,
+        "p99": 23,
+        "max": 23,
+        "mean": 7.38
+      },
+      "service": {
+        "count": 17,
+        "min": 0,
+        "p50": 3,
+        "p90": 4,
+        "p99": 7,
+        "max": 7,
+        "mean": 3.0
+      },
+      "job": {
+        "count": 11,
+        "min": 1,
+        "p50": 1,
+        "p90": 5,
+        "p99": 10,
+        "max": 10,
+        "mean": 2.55
+      }
+    },
+    "top_hubs": [
+      {
+        "rank": 1,
+        "in_degree": 48,
+        "out_degree": 2,
+        "type": "route_file"
+      },
+      {
+        "rank": 2,
+        "in_degree": 44,
+        "out_degree": 13,
+        "type": "model"
+      },
+      {
+        "rank": 3,
+        "in_degree": 28,
+        "out_degree": 8,
+        "type": "model"
+      },
+      {
+        "rank": 4,
+        "in_degree": 23,
+        "out_degree": 2,
+        "type": "controller"
+      },
+      {
+        "rank": 5,
+        "in_degree": 20,
+        "out_degree": 6,
+        "type": "controller"
+      },
+      {
+        "rank": 6,
+        "in_degree": 20,
+        "out_degree": 1,
+        "type": "concern"
+      },
+      {
+        "rank": 7,
+        "in_degree": 19,
+        "out_degree": 0,
+        "type": "database_table"
+      },
+      {
+        "rank": 8,
+        "in_degree": 16,
+        "out_degree": 7,
+        "type": "model"
+      },
+      {
+        "rank": 9,
+        "in_degree": 15,
+        "out_degree": 10,
+        "type": "model"
+      },
+      {
+        "rank": 10,
+        "in_degree": 14,
+        "out_degree": 7,
+        "type": "model"
+      },
+      {
+        "rank": 11,
+        "in_degree": 13,
+        "out_degree": 2,
+        "type": "database_table"
+      },
+      {
+        "rank": 12,
+        "in_degree": 12,
+        "out_degree": 0,
+        "type": "view_template"
+      },
+      {
+        "rank": 13,
+        "in_degree": 11,
+        "out_degree": 7,
+        "type": "controller"
+      },
+      {
+        "rank": 14,
+        "in_degree": 11,
+        "out_degree": 4,
+        "type": "controller"
+      },
+      {
+        "rank": 15,
+        "in_degree": 11,
+        "out_degree": 0,
+        "type": "route_file"
+      },
+      {
+        "rank": 16,
+        "in_degree": 11,
+        "out_degree": 0,
+        "type": "database_table"
+      },
+      {
+        "rank": 17,
+        "in_degree": 10,
+        "out_degree": 0,
+        "type": "job"
+      },
+      {
+        "rank": 18,
+        "in_degree": 10,
+        "out_degree": 5,
+        "type": "model"
+      },
+      {
+        "rank": 19,
+        "in_degree": 10,
+        "out_degree": 7,
+        "type": "controller"
+      },
+      {
+        "rank": 20,
+        "in_degree": 10,
+        "out_degree": 6,
+        "type": "model"
+      }
+    ],
+    "top_hub_blast_radius": {
+      "available": true,
+      "direct_share": 0.085,
+      "depth_2_share": 0.0903,
+      "depth_3_share": 0.0903,
+      "transitive_share": 0.0903,
+      "transitive_units": 51,
+      "depth": 2,
+      "truncated": false,
+      "node_limit": 250000,
+      "structural_share": 0.085,
+      "top_5_transitive_shares": [
+        0.0903,
+        0.4106,
+        0.4106,
+        0.1929,
+        0.0389
+      ],
+      "top_20_max_transitive_share": 0.4743
+    },
+    "model_blast_radius": {
+      "sampled_models": 46,
+      "units": {
+        "count": 46,
+        "min": 16,
+        "p50": 232,
+        "p90": 232,
+        "p99": 232,
+        "max": 232,
+        "mean": 222.61,
+        "histogram": [
+          {
+            "le": 16,
+            "count": 2
+          },
+          {
+            "le": 256,
+            "count": 44
+          }
+        ]
+      },
+      "structural_units": {
+        "count": 46,
+        "min": 1,
+        "p50": 4,
+        "p90": 13,
+        "p99": 43,
+        "max": 43,
+        "mean": 6.57,
+        "histogram": [
+          {
+            "le": 1,
+            "count": 4
+          },
+          {
+            "le": 2,
+            "count": 4
+          },
+          {
+            "le": 4,
+            "count": 15
+          },
+          {
+            "le": 8,
+            "count": 12
+          },
+          {
+            "le": 16,
+            "count": 9
+          },
+          {
+            "le": 32,
+            "count": 1
+          },
+          {
+            "le": 64,
+            "count": 1
+          }
+        ]
+      }
+    },
+    "namespaces": {
+      "top_level_namespaces": 39,
+      "root_units": 377,
+      "namespaced_units": 188,
+      "units_per_namespace": {
+        "count": 39,
+        "min": 1,
+        "p50": 2,
+        "p90": 13,
+        "p99": 44,
+        "max": 44,
+        "mean": 4.82,
+        "histogram": [
+          {
+            "le": 1,
+            "count": 18
+          },
+          {
+            "le": 2,
+            "count": 7
+          },
+          {
+            "le": 4,
+            "count": 4
+          },
+          {
+            "le": 8,
+            "count": 4
+          },
+          {
+            "le": 16,
+            "count": 3
+          },
+          {
+            "le": 32,
+            "count": 2
+          },
+          {
+            "le": 64,
+            "count": 1
+          }
+        ]
+      },
+      "namespaced_edge_share": 0.3119,
+      "cross_namespace_edge_share": 0.3311,
+      "cross_namespace_edge_share_including_root": 0.4223
+    },
+    "cycles": {
+      "strongly_connected_components": 2,
+      "largest_component": 46,
+      "units_in_components": 49,
+      "self_loops": 10,
+      "analysis": {
+        "orphan_count": 153,
+        "dead_end_count": 252,
+        "hub_count": 20,
+        "cycle_count": 84,
+        "cycle_limit_reached": false,
+        "cross_database_edge_count": 0,
+        "volatile_dependency_count": 0,
+        "undeclared_package_edge_count": 0,
+        "unresolvable_route_count": 0,
+        "unmodelled_table_count": 2,
+        "domain_cluster_count": 9
+      }
+    }
+  },
+  "models": {
+    "application_callbacks": {
+      "count": 46,
+      "min": 0,
+      "p50": 0,
+      "p90": 2,
+      "p99": 2,
+      "max": 2,
+      "mean": 0.39,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 36
+        },
+        {
+          "le": 1,
+          "count": 2
+        },
+        {
+          "le": 2,
+          "count": 8
+        }
+      ]
+    },
+    "associations": {
+      "count": 46,
+      "min": 1,
+      "p50": 2,
+      "p90": 5,
+      "p99": 10,
+      "max": 10,
+      "mean": 2.96,
+      "histogram": [
+        {
+          "le": 1,
+          "count": 10
+        },
+        {
+          "le": 2,
+          "count": 13
+        },
+        {
+          "le": 4,
+          "count": 17
+        },
+        {
+          "le": 8,
+          "count": 4
+        },
+        {
+          "le": 16,
+          "count": 2
+        }
+      ]
+    },
+    "callbacks": {
+      "count": 46,
+      "min": 2,
+      "p50": 8,
+      "p90": 15,
+      "p99": 29,
+      "max": 29,
+      "mean": 8.33,
+      "histogram": [
+        {
+          "le": 2,
+          "count": 6
+        },
+        {
+          "le": 4,
+          "count": 12
+        },
+        {
+          "le": 8,
+          "count": 8
+        },
+        {
+          "le": 16,
+          "count": 16
+        },
+        {
+          "le": 32,
+          "count": 4
+        }
+      ]
+    },
+    "columns": {
+      "count": 46,
+      "min": 4,
+      "p50": 7,
+      "p90": 13,
+      "p99": 14,
+      "max": 14,
+      "mean": 8.15,
+      "histogram": [
+        {
+          "le": 4,
+          "count": 1
+        },
+        {
+          "le": 8,
+          "count": 28
+        },
+        {
+          "le": 16,
+          "count": 17
+        }
+      ]
+    },
+    "enums": {
+      "count": 46,
+      "min": 0,
+      "p50": 0,
+      "p90": 1,
+      "p99": 1,
+      "max": 1,
+      "mean": 0.13,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 40
+        },
+        {
+          "le": 1,
+          "count": 6
+        }
+      ]
+    },
+    "inlined_concerns": {
+      "count": 46,
+      "min": 0,
+      "p50": 0,
+      "p90": 1,
+      "p99": 1,
+      "max": 1,
+      "mean": 0.33,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 31
+        },
+        {
+          "le": 1,
+          "count": 15
+        }
+      ]
+    },
+    "methods": {
+      "count": 46,
+      "min": 0,
+      "p50": 0,
+      "p90": 4,
+      "p99": 6,
+      "max": 6,
+      "mean": 1.04,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 28
+        },
+        {
+          "le": 1,
+          "count": 3
+        },
+        {
+          "le": 2,
+          "count": 9
+        },
+        {
+          "le": 4,
+          "count": 4
+        },
+        {
+          "le": 8,
+          "count": 2
+        }
+      ]
+    },
+    "scopes": {
+      "count": 46,
+      "min": 0,
+      "p50": 0,
+      "p90": 1,
+      "p99": 2,
+      "max": 2,
+      "mean": 0.2,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 38
+        },
+        {
+          "le": 1,
+          "count": 7
+        },
+        {
+          "le": 2,
+          "count": 1
+        }
+      ]
+    },
+    "validations": {
+      "count": 46,
+      "min": 2,
+      "p50": 4,
+      "p90": 6,
+      "p99": 8,
+      "max": 8,
+      "mean": 3.76,
+      "histogram": [
+        {
+          "le": 2,
+          "count": 9
+        },
+        {
+          "le": 4,
+          "count": 26
+        },
+        {
+          "le": 8,
+          "count": 11
+        }
+      ]
+    },
+    "count": 46,
+    "sti_children": 5,
+    "concerns_included_by_models": 4,
+    "concern_fan_in_top_10": [
+      7,
+      3,
+      3,
+      2
+    ],
+    "tables": {
+      "columns": {
+        "count": 43,
+        "min": 4,
+        "p50": 7,
+        "p90": 11,
+        "p99": 14,
+        "max": 14,
+        "mean": 7.56
+      },
+      "foreign_keys": {
+        "count": 43,
+        "min": 0,
+        "p50": 2,
+        "p90": 2,
+        "p99": 3,
+        "max": 3,
+        "mean": 1.47
+      },
+      "indexes": {
+        "count": 43,
+        "min": 0,
+        "p50": 2,
+        "p90": 3,
+        "p99": 4,
+        "max": 4,
+        "mean": 2.19
+      }
+    },
+    "concern_fan_in_top_10_all_units": [
+      20,
+      7,
+      3,
+      3,
+      2,
+      2
+    ]
+  },
+  "controllers": {
+    "actions": {
+      "count": 21,
+      "min": 1,
+      "p50": 3,
+      "p90": 5,
+      "p99": 10,
+      "max": 10,
+      "mean": 3.19,
+      "histogram": [
+        {
+          "le": 1,
+          "count": 4
+        },
+        {
+          "le": 2,
+          "count": 5
+        },
+        {
+          "le": 4,
+          "count": 9
+        },
+        {
+          "le": 8,
+          "count": 2
+        },
+        {
+          "le": 16,
+          "count": 1
+        }
+      ]
+    },
+    "application_filters": {
+      "count": 21,
+      "min": 0,
+      "p50": 3,
+      "p90": 3,
+      "p99": 4,
+      "max": 4,
+      "mean": 2.48,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 1
+        },
+        {
+          "le": 1,
+          "count": 1
+        },
+        {
+          "le": 2,
+          "count": 8
+        },
+        {
+          "le": 4,
+          "count": 11
+        }
+      ]
+    },
+    "filters": {
+      "count": 21,
+      "min": 2,
+      "p50": 5,
+      "p90": 5,
+      "p99": 6,
+      "max": 6,
+      "mean": 4.1,
+      "histogram": [
+        {
+          "le": 2,
+          "count": 5
+        },
+        {
+          "le": 4,
+          "count": 5
+        },
+        {
+          "le": 8,
+          "count": 11
+        }
+      ]
+    },
+    "routes_per_controller": {
+      "count": 21,
+      "min": 0,
+      "p50": 3,
+      "p90": 5,
+      "p99": 11,
+      "max": 11,
+      "mean": 3.14,
+      "histogram": [
+        {
+          "le": 0,
+          "count": 2
+        },
+        {
+          "le": 1,
+          "count": 4
+        },
+        {
+          "le": 2,
+          "count": 4
+        },
+        {
+          "le": 4,
+          "count": 5
+        },
+        {
+          "le": 8,
+          "count": 5
+        },
+        {
+          "le": 16,
+          "count": 1
+        }
+      ]
+    },
+    "count": 21,
+    "routes_total_index": 77,
+    "routes_total_runtime": 77
+  },
+  "files": {
+    "available": true,
+    "ruby": {
+      "app": {
+        "count": 139,
+        "lines": {
+          "count": 139,
+          "min": 2,
+          "p50": 14,
+          "p90": 34,
+          "p99": 59,
+          "max": 60,
+          "mean": 16.81,
+          "histogram": [
+            {
+              "le": 2,
+              "count": 1
+            },
+            {
+              "le": 4,
+              "count": 7
+            },
+            {
+              "le": 8,
+              "count": 20
+            },
+            {
+              "le": 16,
+              "count": 64
+            },
+            {
+              "le": 32,
+              "count": 32
+            },
+            {
+              "le": 64,
+              "count": 15
+            }
+          ]
+        }
+      },
+      "lib": {
+        "count": 6,
+        "lines": {
+          "count": 6,
+          "min": 9,
+          "p50": 21,
+          "p90": 266,
+          "p99": 266,
+          "max": 266,
+          "mean": 62.0,
+          "histogram": [
+            {
+              "le": 16,
+              "count": 1
+            },
+            {
+              "le": 32,
+              "count": 4
+            },
+            {
+              "le": 512,
+              "count": 1
+            }
+          ]
+        }
+      },
+      "packages": {
+        "count": 0,
+        "lines": {
+          "count": 0
+        }
+      },
+      "elsewhere": {
+        "count": 18,
+        "lines": {
+          "count": 18,
+          "min": 1,
+          "p50": 11,
+          "p90": 172,
+          "p99": 583,
+          "max": 583,
+          "mean": 62.78,
+          "histogram": [
+            {
+              "le": 1,
+              "count": 2
+            },
+            {
+              "le": 4,
+              "count": 2
+            },
+            {
+              "le": 8,
+              "count": 2
+            },
+            {
+              "le": 16,
+              "count": 4
+            },
+            {
+              "le": 32,
+              "count": 2
+            },
+            {
+              "le": 64,
+              "count": 2
+            },
+            {
+              "le": 128,
+              "count": 2
+            },
+            {
+              "le": 256,
+              "count": 1
+            },
+            {
+              "le": 1024,
+              "count": 1
+            }
+          ]
+        }
+      },
+      "all": {
+        "count": 163,
+        "lines": {
+          "count": 163,
+          "min": 1,
+          "p50": 14,
+          "p90": 38,
+          "p99": 266,
+          "max": 583,
+          "mean": 23.55,
+          "histogram": [
+            {
+              "le": 1,
+              "count": 2
+            },
+            {
+              "le": 2,
+              "count": 1
+            },
+            {
+              "le": 4,
+              "count": 9
+            },
+            {
+              "le": 8,
+              "count": 22
+            },
+            {
+              "le": 16,
+              "count": 69
+            },
+            {
+              "le": 32,
+              "count": 38
+            },
+            {
+              "le": 64,
+              "count": 17
+            },
+            {
+              "le": 128,
+              "count": 2
+            },
+            {
+              "le": 256,
+              "count": 1
+            },
+            {
+              "le": 512,
+              "count": 1
+            },
+            {
+              "le": 1024,
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    "view_templates": 34,
+    "test_files": 19,
+    "files_seen": 244,
+    "walk_truncated": false
+  },
+  "app_weight": {
+    "gems_in_lockfile": 112,
+    "gems_loaded": 97,
+    "ruby_version": "3.3.6",
+    "rails_version": "8.0.5.2",
+    "eager_load_configured": false,
+    "engines": 4,
+    "initializers": 192,
+    "timings": {
+      "available": true,
+      "boot_seconds": 0.79,
+      "eager_load_seconds": 0.31,
+      "eager_boot_wall_seconds": 1.25,
+      "modules_defined_by_eager_load": 1770,
+      "autoloaded_constants": 164,
+      "active_record_descendants": 47
+    }
+  },
+  "history": {
+    "available": false,
+    "reason": "shallow"
+  },
+  "woods_run": {
+    "woods_version": "2.2.0.alpha",
+    "extraction_mode": "full",
+    "generation": 8,
+    "total_units": 568,
+    "total_chunks": 267,
+    "units_by_directory": {
+      "models": 46,
+      "controllers": 21,
+      "graphql": 7,
+      "components": 5,
+      "view_components": 1,
+      "services": 17,
+      "jobs": 11,
+      "mailers": 3,
+      "serializers": 6,
+      "managers": 1,
+      "policies": 4,
+      "validators": 1,
+      "concerns": 6,
+      "routes": 80,
+      "middleware": 1,
+      "i18n": 1,
+      "pundit_policies": 3,
+      "configurations": 11,
+      "engines": 4,
+      "view_templates": 34,
+      "migrations": 5,
+      "action_cable_channels": 2,
+      "scheduled_jobs": 4,
+      "rake_tasks": 6,
+      "state_machines": 2,
+      "events": 1,
+      "decorators": 1,
+      "database_views": 1,
+      "database_tables": 43,
+      "external_consumers": 0,
+      "caching": 1,
+      "factories": 4,
+      "test_mappings": 19,
+      "test_support": 3,
+      "rails_source": 198,
+      "poros": 7,
+      "libs": 3,
+      "packages": 0,
+      "graphql_operations": 0,
+      "config_files": 4,
+      "js_modules": 0,
+      "docs": 1
+    },
+    "extractor_timings": {
+      "action_cable_channels": 0.002,
+      "caching": 0.004,
+      "components": 0.006,
+      "concerns": 0.035,
+      "config_files": 0.003,
+      "configurations": 0.003,
+      "controllers": 0.144,
+      "database_tables": 0.038,
+      "database_views": 0.001,
+      "decorators": 0.0,
+      "docs": 0.007,
+      "engines": 0.001,
+      "events": 0.002,
+      "external_consumers": 0.001,
+      "factories": 0.001,
+      "graphql": 0.009,
+      "graphql_operations": 0.0,
+      "i18n": 0.0,
+      "jobs": 0.01,
+      "js_modules": 0.0,
+      "libs": 0.021,
+      "mailers": 0.005,
+      "managers": 0.001,
+      "middleware": 0.002,
+      "migrations": 0.025,
+      "models": 0.243,
+      "packages": 0.001,
+      "policies": 0.003,
+      "poros": 0.031,
+      "pundit_policies": 0.003,
+      "rails_source": 0.102,
+      "rake_tasks": 0.004,
+      "routes": 0.005,
+      "scheduled_jobs": 0.0,
+      "serializers": 0.003,
+      "services": 0.098,
+      "state_machines": 0.004,
+      "test_mappings": 0.028,
+      "test_support": 0.002,
+      "validators": 0.0,
+      "view_components": 0.006,
+      "view_templates": 0.029
+    },
+    "extractor_timings_total": 0.883,
+    "git_enrichment_state": "unavailable"
+  }
+}

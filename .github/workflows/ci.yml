@@ -71,6 +71,11 @@ jobs:
       - name: Source provenance oracle self-tests
         run: ruby scripts/tools/source_provenance_self_test.rb
 
+      # The profiler promises to emit nothing that identifies an application.
+      # This plants identifying strings in a fake index and fails on any leak.
+      - name: Shape profile privacy self-tests
+        run: ruby scripts/tools/woods_shape_profile_self_test.rb
+
       # The gem is checked out here too — cheap, no build — so the contract's
       # type keys can be validated against IndexReader::TYPE_DIRS rather than
       # against a guess. manifest.json's `counts` is keyed by plural directory

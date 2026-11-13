@@ -33,6 +33,18 @@ Dir.mktmpdir('woods-flow-inventory') do |directory|
     raise 'inverted index omitted' unless FlowDocumentInventory.artifact_map(directory)['flows/by_unit.json'] == inverse
   end
 
+  verdicts = { 'top_level_constants' => %w[Post User] }
+  write.call('top_level_constants.json', verdicts)
+  check.call('the top-level constant verdicts are not an orphaned document') do
+    documents = FlowDocumentInventory.documents(directory)
+    raise "orphans: #{(documents - ['show.json']).inspect}" unless documents == ['show.json']
+  end
+  check.call('content snapshots retain the constant verdicts, unnormalized') do
+    snapshot = FlowDocumentInventory.artifact_map(directory) { |_content| { 'normalized_document' => true } }
+    raise 'constant verdicts changed' unless snapshot['flows/top_level_constants.json'] == verdicts
+  end
+  File.delete(File.join(directory, 'top_level_constants.json'))
+
   before = FlowDocumentInventory.artifact_map(directory)
   write.call('by_unit.json', 'Post' => { 'model' => ['PostsController#create'] })
   check.call('inverted membership changes remain detectable') do

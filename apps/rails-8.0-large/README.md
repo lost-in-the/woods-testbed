@@ -199,6 +199,50 @@ Its output lives under `packs/`, `app/views/<package>/`, `db/scale/` and
 `config/routes_scale.rb` (all gitignored, wired by `config/application.rb`).
 `--history` refuses an app that already has `.git`.
 
+### Shape profile
+
+The generated application is easier to extract than a real one of the same
+unit count: cheap to load, a sparse graph, small uniform files, no history.
+`scripts/tools/woods_shape_profile.rb` measures the shape of an application
+and its Woods index so the generator can be fitted to a real application
+whose code we cannot see.
+
+The owner of any Rails app with Woods installed runs it once, after an
+extraction, and sends back the JSON:
+
+```bash
+bin/rails woods:extract
+bin/rails runner path/to/woods_shape_profile.rb --timings --out shape.json
+```
+
+The index directory defaults to `tmp/woods`; pass another as the first
+argument. `--timings` boots the app twice in child processes to time boot and
+eager load; leave it off to skip that.
+
+It emits only numbers (counts, ratios and distributions: units by type, source
+size, graph degrees, hub in-degrees, blast radius, namespace spread, cycles,
+model and controller facts, file line counts, gem count, commit volume), Woods'
+own unit type names and edge labels, and the Ruby, Rails and Woods version
+numbers. It never emits an identifier, class, path, table, column, route, gem,
+author, commit message, branch, SHA, hostname or username: an unknown unit type
+or edge label is counted under `other`, and a self-check walks the finished
+document and aborts, printing nothing, if any string is outside the script's
+fixed lists. It uses no network and writes nothing but the `--out` file. The
+limits are in the script's header: exact totals and version numbers do describe
+the app, so read the JSON before sending it.
+
+Two profiles of Canopy are checked in under `shape/`: `canopy-base.json` (the
+committed app) and `canopy-scale-large.json` (after `SCALE=large
+generate_scale_app.rb`). Git history is reported as unavailable in a shallow
+clone, as these were. Compare any two profiles with plain Ruby:
+
+```bash
+ruby scripts/tools/woods_shape_profile.rb --compare \
+  apps/rails-8.0-large/shape/canopy-scale-large.json shape.json
+```
+
+The table lists the ratios that drive extraction cost, largest gap first.
+
 See [the implementation plan](../../docs/plans/003-functional-publishing-app.md)
 and [validation notes](../../docs/canopy-validation.md) for the measured baseline,
 limits, and entity diagram.
