@@ -64,8 +64,10 @@
 #   (line counts only), reads Gemfile.lock, and runs read-only `git` commands.
 #   It writes nothing except the file named by --out. `--timings` boots the
 #   application twice in child processes (`bin/rails runner`), which does
-#   whatever booting your app does (logs, bootsnap cache). A child is killed
-#   after CHILD_TIMEOUT seconds; a failure is reported by a fixed cause and the
+#   whatever booting your app does (logs, bootsnap cache). One deadline
+#   (CHILD_TIMEOUT) bounds each child from spawn to the last byte read, so a
+#   process it leaves holding the output open cannot stall the profiler; its
+#   process group is killed. A failure is reported by a fixed cause and the
 #   exit status, never by the child's output.
 
 require 'json'
@@ -117,6 +119,7 @@ module WoodsShapeProfile
     published_index direct full incremental refresh seed watch unknown available unavailable partial
     shallow git_unavailable not_a_repository no_app_root not_requested no_rails no_lockfile child_failed
     missing unreadable boot eager_load command_not_found spawn_failed nonzero_exit signaled timeout no_marker
+    output_open
   ] + [OTHER, UNLABELLED]).freeze
 
   VERSION_KEYS = %w[ruby_version rails_version woods_version].freeze
@@ -930,16 +933,24 @@ module WoodsShapeProfile
       puts ['#{MARKER}', elapsed.round(3), ObjectSpace.each_object(Module).count - before, expected, models].join(' ')
     RUBY
 
+    # One deadline bounds each child from spawn to the last byte read.
     CHILD_TIMEOUT = 900
+    # After the child exits, how long its output may stay open (held by a
+    # process it left behind) before reading stops, within the deadline.
+    OUTPUT_GRACE = 5
+    POLL = 0.05
 
     # @param ruby [String] the interpreter that runs bin/rails (the self-test points it elsewhere)
-    # @param child_timeout [Numeric] seconds before a child is killed and reported as `timeout`
-    def initialize(root, manifest, timings:, ruby: RbConfig.ruby, child_timeout: CHILD_TIMEOUT)
+    # @param child_timeout [Numeric] seconds from spawn after which the child's group is killed
+    # @param output_grace [Numeric] seconds the output may stay open after the child exits
+    def initialize(root, manifest, timings:, ruby: RbConfig.ruby, child_timeout: CHILD_TIMEOUT,
+                   output_grace: OUTPUT_GRACE)
       @root = root
       @manifest = manifest
       @timings = timings
       @ruby = ruby
       @child_timeout = child_timeout
+      @output_grace = output_grace
     end
 
     def to_h
@@ -979,47 +990,126 @@ module WoodsShapeProfile
       return child_failed('boot', boot) unless boot[:seconds]
 
       eager = run_child(CHILD)
-      return child_failed('eager_load', eager) unless eager[:seconds]
+      return child_failed('eager_load', eager) unless eager[:seconds] && eager[:marker]
 
-      fields = eager[:output][/^#{MARKER} ([\d. -]+)$/, 1]&.split
-      return child_failed('eager_load', cause: 'no_marker') unless fields&.size == 4
+      { available: true, boot_seconds: boot[:seconds].round(2), eager_boot_wall_seconds: eager[:seconds].round(2) }
+        .merge(measured(eager[:marker]))
+    end
 
-      boot = boot[:seconds]
-      wall = eager[:seconds]
-      # The child prints what this script's own code measured; a negative value
-      # is its "could not measure" sentinel and is dropped.
+    # The four numbers the eager-load child printed after the marker: what this
+    # script's own code measured. A negative value is its "could not measure"
+    # sentinel and is dropped.
+    def measured(fields)
       positive = ->(text) { text.to_i.negative? ? nil : text.to_i }
       seconds = fields[0].to_f
-      { available: true, boot_seconds: boot.round(2), eager_load_seconds: seconds.negative? ? nil : seconds,
-        eager_boot_wall_seconds: wall.round(2), modules_defined_by_eager_load: positive.call(fields[1]),
+      { eager_load_seconds: seconds.negative? ? nil : seconds, modules_defined_by_eager_load: positive.call(fields[1]),
         autoloaded_constants: positive.call(fields[2]), active_record_descendants: positive.call(fields[3]) }
     end
 
-    # Which child failed and why, from a fixed vocabulary. The child's output
-    # is never part of it: an error message can name the application.
+    # Which child failed and why, from a fixed vocabulary, plus the marker's
+    # numbers if the child printed them before it failed. The child's output is
+    # never part of it: an error message can name the application.
     def child_failed(child, result)
-      { available: false, reason: 'child_failed', failed_child: child, cause: result[:cause],
-        exit_status: result[:exit_status] }
+      cause = result[:cause] || (result[:output_open] ? 'output_open' : 'no_marker')
+      failure = { available: false, reason: 'child_failed', failed_child: child, cause: cause,
+                  exit_status: result[:exit_status] }
+      result[:marker] ? failure.merge(measured(result[:marker])) : failure
     end
 
-    # @return [Hash] { seconds:, output: } on success, else { cause:, exit_status: }
+    # Runs `bin/rails runner code` in its own process group under one deadline
+    # that covers spawn, wait and reading the output. Only the marker line is
+    # kept (MarkerScan); nothing else of the output is retained.
+    #
+    # @return [Hash] { seconds:, exit_status: 0, marker:, output_open: } when the child exited 0,
+    #   else { cause:, exit_status:, marker: }
     def run_child(code)
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      Open3.popen2e(@ruby, 'bin/rails', 'runner', code, chdir: @root, pgroup: true) do |stdin, out, wait|
-        stdin.close
-        reader = Thread.new { out.read }
-        return stop(wait.pid, reader) unless wait.join(@child_timeout)
-
-        output = reader.value.to_s
-        status = wait.value
-        return { seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, output: output } if status.success?
-
-        exited(status)
+      started = now
+      reader, writer = IO.pipe
+      begin
+        pid = Process.spawn(@ruby, 'bin/rails', 'runner', code, chdir: @root, pgroup: true,
+                                                                in: File::NULL, out: writer, err: writer)
+      ensure
+        writer.close
       end
+      collect(pid, reader, started)
     rescue Errno::ENOENT, Errno::EACCES
       { cause: 'command_not_found' }
     rescue SystemCallError, IOError
       { cause: 'spawn_failed' }
+    ensure
+      reader.close if reader && !reader.closed?
+    end
+
+    # Read and reap until the child has exited and its output reached EOF, the
+    # output has stayed open OUTPUT_GRACE past the exit, or the deadline passed.
+    def collect(pid, io, started)
+      deadline = started + @child_timeout
+      scan = MarkerScan.new
+      status = exited_at = nil
+      eof = false
+      loop do
+        status ||= reap(pid)
+        exited_at ||= now if status
+        break if status && eof
+
+        limit = status ? [deadline, exited_at + @output_grace].min : deadline
+        remaining = limit - now
+        break unless remaining.positive?
+
+        if eof
+          sleep([remaining, POLL].min)
+        elsif IO.select([io], nil, nil, [remaining, POLL].min)
+          eof = !read_chunk(io, scan)
+        end
+      end
+      finish(pid, status, eof, scan, exited_at && exited_at - started)
+    end
+
+    def finish(pid, status, eof, scan, seconds)
+      # Whatever is still running in the group (the child at the deadline, or
+      # what it left holding the output) is ours to stop.
+      kill_group(pid, reap: status.nil?) unless status && eof
+      return { cause: 'timeout', marker: scan.marker } unless status
+      return exited(status).merge(marker: scan.marker) unless status.success?
+
+      { seconds: seconds, exit_status: 0, marker: scan.marker, output_open: !eof }
+    end
+
+    # @return [Boolean] false at EOF
+    def read_chunk(io, scan)
+      chunk = io.read_nonblock(1 << 16, exception: false)
+      return false if chunk.nil?
+
+      scan << chunk if chunk.is_a?(String)
+      true
+    rescue IOError, SystemCallError
+      false
+    end
+
+    def reap(pid)
+      _, status = Process.waitpid2(pid, Process::WNOHANG)
+      status
+    rescue Errno::ECHILD
+      nil
+    end
+
+    def kill_group(pid, reap:)
+      begin
+        Process.kill('KILL', -pid)
+      rescue SystemCallError
+        nil
+      end
+      return unless reap
+
+      begin
+        Process.wait(pid)
+      rescue SystemCallError
+        nil
+      end
+    end
+
+    def now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def exited(status)
@@ -1028,15 +1118,51 @@ module WoodsShapeProfile
       { cause: 'nonzero_exit', exit_status: status.exitstatus }
     end
 
-    # Kill the child's whole process group (bin/rails may fork) and stop reading its output.
-    def stop(pid, reader)
-      begin
-        Process.kill('KILL', -pid)
-      rescue SystemCallError
-        nil
+    # Finds the first marker line in a child's output while holding at most one
+    # line of LINE_LIMIT bytes: a longer line (a flood without a newline) is
+    # dropped as it grows, and no other text is kept.
+    class MarkerScan
+      LINE_LIMIT = 4096
+      PATTERN = /\A#{MARKER} ([\d. -]+)\r?\z/n.freeze
+
+      attr_reader :marker
+
+      def initialize
+        @line = String.new(encoding: Encoding::BINARY)
+        @overflow = false
+        @marker = nil
       end
-      reader.kill unless reader.join(5)
-      { cause: 'timeout' }
+
+      def <<(chunk)
+        parts = chunk.b.split("\n", -1)
+        tail = parts.pop
+        parts.each do |part|
+          append(part)
+          check(@line) unless @overflow
+          @line = String.new(encoding: Encoding::BINARY)
+          @overflow = false
+        end
+        append(tail.to_s)
+      end
+
+      private
+
+      def append(text)
+        return if @overflow
+
+        @line << text
+        return unless @line.bytesize > LINE_LIMIT
+
+        @line = String.new(encoding: Encoding::BINARY)
+        @overflow = true
+      end
+
+      def check(line)
+        return if @marker
+
+        fields = line[PATTERN, 1]&.split
+        @marker = fields if fields&.size == 4
+      end
     end
   end
 

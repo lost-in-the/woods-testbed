@@ -227,10 +227,62 @@ def assert_timings_causes(tmp)
   check('killed by a signal', timings.call("#{noisy}Process.kill('TERM', Process.pid); sleep 5") ==
                               failed('boot', 'signaled', 128 + Signal.list.fetch('TERM')))
   check('no marker', timings.call("ARGV[1] == 'nil' || puts('Zyxwv::SecretLedgerAccount')") ==
-                     failed('eager_load', 'no_marker', nil))
+                     failed('eager_load', 'no_marker', 0))
   check('timeout', timings.call("#{noisy}sleep 30", child_timeout: 1) == failed('boot', 'timeout', nil))
   check('command not found', timings.call('exit 0', ruby: File.join(tmp, 'no-such-ruby')) ==
                              failed('boot', 'command_not_found', nil))
+end
+
+# One deadline bounds the whole child interaction, the output read included.
+# Each case would hang (or grow without bound) if only the wait were bounded.
+def assert_timings_deadline(tmp)
+  root = File.join(tmp, 'deadline')
+  FileUtils.mkdir_p(File.join(root, 'bin'))
+  pid_file = File.join(tmp, 'grandchild.pid')
+  # A grandchild that inherits stdout and outlives the child, as a daemon or a forked server would.
+  grandchild = "File.write(#{pid_file.inspect}, Process.spawn(RbConfig.ruby, '-e', 'sleep 30').to_s); "
+  marker = "puts('WOODS_SHAPE_TIMING 0.5 10 3 2'); "
+  run = lambda do |label, eager_script|
+    File.write(File.join(root, 'bin/rails'), "exit 0 if ARGV[1] == 'nil'\n#{eager_script}\n")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = WoodsShapeProfile::AppWeight.new(root, {}, timings: true, child_timeout: 1.5, output_grace: 0.3)
+                                         .send(:timings, true)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    check("#{label}: bounded by the deadline", elapsed < 6)
+    document = JSON.parse(JSON.generate('app_weight' => { 'timings' => result }))
+    WoodsShapeProfile::Privacy.verify!(document)
+    assert_no_canaries(JSON.generate(document), label)
+    document.dig('app_weight', 'timings')
+  end
+
+  open_pipe = run.call('exit 0, pipe held open', "#{grandchild}puts('Zyxwv'); exit 0")
+  check('exit 0, pipe held open', open_pipe == failed('eager_load', 'output_open', 0))
+  check('the grandchild is killed', dead?(File.read(pid_file).to_i))
+  measured = run.call('marker, then pipe held open', "#{marker}#{grandchild}exit 0")
+  check('marker, then pipe held open', measured['available'] == true && measured['eager_load_seconds'] == 0.5)
+  failing = run.call('exit 4, pipe held open', "#{grandchild}exit 4")
+  check('exit 4, pipe held open', failing == failed('eager_load', 'nonzero_exit', 4))
+  hung = run.call('marker, then hangs', "#{marker}$stdout.flush; sleep 30")
+  check('marker, then hangs', hung.slice('available', 'failed_child', 'cause', 'eager_load_seconds') ==
+                              { 'available' => false, 'failed_child' => 'eager_load', 'cause' => 'timeout',
+                                'eager_load_seconds' => 0.5 })
+  flood = run.call('floods without a newline', "chunk = 'Zyxwv' * 13_107; loop { $stdout.write(chunk) }")
+  check('floods without a newline', flood == failed('eager_load', 'timeout', nil))
+  closed = run.call('closes stdout, keeps running', "$stdout.close; $stderr.close; sleep 30")
+  check('closes stdout, keeps running', closed == failed('eager_load', 'timeout', nil))
+end
+
+# Gone, or a zombie waiting for init: either way no longer running.
+def dead?(pid)
+  20.times do
+    state = File.read("/proc/#{pid}/stat").split(') ').last.to_s[0]
+    return true if state == 'Z'
+
+    sleep 0.1
+  end
+  false
+rescue Errno::ENOENT, Errno::ESRCH
+  true
 end
 
 def failed(child, cause, exit_status)
@@ -407,6 +459,7 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
 
   assert_compare_total(tmp)
   assert_timings_causes(tmp)
+  assert_timings_deadline(tmp)
 
   puts "PASS shape profile: no planted string emitted, numbers exact, self-check aborts on a bypass#{
     ' (git history skipped: git unavailable)' unless with_git}"
