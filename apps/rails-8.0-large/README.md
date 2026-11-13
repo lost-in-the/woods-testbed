@@ -218,6 +218,8 @@ bin/rails runner path/to/woods_shape_profile.rb --timings --out shape.json
 The index directory defaults to `tmp/woods`; pass another as the first
 argument. `--timings` boots the app twice in child processes to time boot and
 eager load; leave it off to skip that.
+It reads only files that resolve inside the index directory: a payload or unit file that is, or sits behind, a symlink
+out of it is skipped, and a generation marker naming a payload outside it (`../woods-old/...`) is refused.
 
 It emits only numbers (counts, ratios and distributions: units by type, source
 size, graph degrees, hub in-degrees, blast radius, namespace spread, cycles,

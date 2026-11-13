@@ -59,7 +59,8 @@
 #     you send it. It is short.
 #
 # WHAT IT TOUCHES
-#   No network. It reads the index, stats the files under the application root
+#   No network. It reads the index (only files that resolve inside the index
+#   directory: see Paths.inside?), stats the files under the application root
 #   (line counts only), reads Gemfile.lock, and runs read-only `git` commands.
 #   It writes nothing except the file named by --out. `--timings` boots the
 #   application twice in child processes (`bin/rails runner`), which does
@@ -330,6 +331,24 @@ module WoodsShapeProfile
     end
   end
 
+  # Path containment, the one rule every read of the index goes through.
+  module Paths
+    module_function
+
+    # A path is inside a root only when, both resolved (File.realpath, so no
+    # `..` and no symlink can step out), it equals the root or starts with the
+    # root plus a separator: `/x/woods-old` is not inside `/x/woods`.
+    #
+    # @return [Boolean] false as well when either path does not exist
+    def inside?(path, root)
+      real = File.realpath(path)
+      base = File.realpath(root)
+      real == base || real.start_with?(base.end_with?(File::SEPARATOR) ? base : base + File::SEPARATOR)
+    rescue SystemCallError
+      false
+    end
+  end
+
   # Reads one published generation, through Woods' own reader when it is loaded.
   class IndexSource
     attr_reader :payload_dir, :reader_name
@@ -339,6 +358,9 @@ module WoodsShapeProfile
       @published = open_published
       @reader_name = @published ? 'published_index' : 'direct'
       @payload_dir = @published ? @published.payload_dir.to_s : direct_payload_dir
+      unless Paths.inside?(@payload_dir, @index_dir)
+        abort 'woods_shape_profile: the published payload resolves outside the index directory; nothing was written.'
+      end
       abort "woods_shape_profile: no Woods index (manifest.json) under #{index_dir}" unless artifact?('manifest.json')
     end
 
@@ -360,7 +382,7 @@ module WoodsShapeProfile
     # @return [Hash, Array, nil] a Woods JSON artifact of the payload, read as UTF-8
     def artifact(name)
       path = File.join(@payload_dir, name)
-      return nil unless File.file?(path)
+      return nil unless readable?(path)
 
       JSON.parse(read(path))
     rescue JSON::ParserError, SystemCallError
@@ -368,12 +390,12 @@ module WoodsShapeProfile
     end
 
     def artifact?(name)
-      File.file?(File.join(@payload_dir, name))
+      readable?(File.join(@payload_dir, name))
     end
 
     def marker
       path = File.join(@index_dir, 'generation.json')
-      data = File.file?(path) ? JSON.parse(read(path)) : {}
+      data = File.file?(path) && Paths.inside?(path, @index_dir) ? JSON.parse(read(path)) : {}
       data.is_a?(Hash) ? data : {}
     rescue JSON::ParserError, SystemCallError
       {}
@@ -381,10 +403,15 @@ module WoodsShapeProfile
 
     def unit_file_sizes
       Dir.glob(File.join(@payload_dir, '*', '*.json')).reject { |path| File.basename(path).start_with?('_') }
-         .map { |path| File.size(path) }
+         .select { |path| readable?(path) }.map { |path| File.size(path) }
     end
 
     private
+
+    # A regular file that resolves inside the payload: a symlink out of it is never read.
+    def readable?(path)
+      File.file?(path) && Paths.inside?(path, @payload_dir)
+    end
 
     def open_published
       require 'woods/published_index' unless defined?(Woods::PublishedIndex)
@@ -393,16 +420,21 @@ module WoodsShapeProfile
       nil
     end
 
+    # The marker's payload when it resolves inside the index; the index itself
+    # (a flat, pre-generation index) when there is no marker or it names nothing.
+    # A payload that exists outside the index is returned as is, and refused.
     def direct_payload_dir
       payload = marker['payload']
-      candidate = payload.is_a?(String) ? File.expand_path(payload, @index_dir) : @index_dir
-      candidate.start_with?(@index_dir) && File.directory?(candidate) ? candidate : @index_dir
+      return @index_dir unless payload.is_a?(String)
+
+      candidate = File.expand_path(payload, @index_dir)
+      File.directory?(candidate) ? candidate : @index_dir
     end
 
     def each_unit_directly
       Dir.children(@payload_dir).sort.each do |dir|
         Dir.glob(File.join(@payload_dir, dir, '*.json')).sort.each do |path|
-          next if File.basename(path).start_with?('_')
+          next if File.basename(path).start_with?('_') || !readable?(path)
 
           unit = begin
             JSON.parse(read(path))
