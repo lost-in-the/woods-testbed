@@ -196,6 +196,38 @@ def assert_compare_total(tmp)
   check('a file that is not JSON is refused cleanly', !status.success? && !output.include?('Error)'))
 end
 
+# `--timings` children: a failure reports which child, a fixed-vocabulary
+# cause and the exit status, never the child's output (it can name the app).
+def assert_timings_causes(tmp)
+  root = File.join(tmp, 'timed')
+  FileUtils.mkdir_p(File.join(root, 'bin'))
+  timings = lambda do |script, **options|
+    File.write(File.join(root, 'bin/rails'), script)
+    result = WoodsShapeProfile::AppWeight.new(root, {}, timings: true, **options).send(:timings, true)
+    document = JSON.parse(JSON.generate('app_weight' => { 'timings' => result }))
+    WoodsShapeProfile::Privacy.verify!(document)
+    assert_no_canaries(JSON.generate(document), 'a timings result')
+    document.dig('app_weight', 'timings')
+  end
+  noisy = "$stderr.puts 'Zyxwv::SecretLedgerAccount is broken in /hidden/vault'; "
+  ok = timings.call("ARGV[1] == 'nil' || puts('WOODS_SHAPE_TIMING 0.5 10 3 2')")
+  check('timings succeed', ok['available'] == true && ok['eager_load_seconds'] == 0.5 &&
+                           ok['modules_defined_by_eager_load'] == 10 && ok['active_record_descendants'] == 2)
+  check('nonzero exit', timings.call("#{noisy}exit 3") == failed('boot', 'nonzero_exit', 3))
+  check('killed by a signal', timings.call("#{noisy}Process.kill('TERM', Process.pid); sleep 5") ==
+                              failed('boot', 'signaled', 128 + Signal.list.fetch('TERM')))
+  check('no marker', timings.call("ARGV[1] == 'nil' || puts('Zyxwv::SecretLedgerAccount')") ==
+                     failed('eager_load', 'no_marker', nil))
+  check('timeout', timings.call("#{noisy}sleep 30", child_timeout: 1) == failed('boot', 'timeout', nil))
+  check('command not found', timings.call('exit 0', ruby: File.join(tmp, 'no-such-ruby')) ==
+                             failed('boot', 'command_not_found', nil))
+end
+
+def failed(child, cause, exit_status)
+  { 'available' => false, 'reason' => 'child_failed', 'failed_child' => child, 'cause' => cause,
+    'exit_status' => exit_status }
+end
+
 def refused(label, *args)
   output, status = Open3.capture2e(RbConfig.ruby, SCRIPT, *args)
   check("#{label} is refused", !status.success? && !output.include?('profile_version'))
@@ -361,6 +393,7 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   check('a zero side sorts first', profile('--compare', out, empty).lines[1].start_with?('units'))
 
   assert_compare_total(tmp)
+  assert_timings_causes(tmp)
 
   puts "PASS shape profile: no planted string emitted, numbers exact, self-check aborts on a bypass#{
     ' (git history skipped: git unavailable)' unless with_git}"
