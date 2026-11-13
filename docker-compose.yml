@@ -160,7 +160,7 @@ services:
 
   qdrant:
     profiles: [backends]
-    image: qdrant/qdrant:v1.20.0
+    image: qdrant/qdrant:v1.20.1
     container_name: woods-testbed-qdrant
     ports:
       - "${QDRANT_PORT:-56333}:6333"
