@@ -165,6 +165,37 @@ def assert_payload_contained(tmp)
   refused('a payload symlinked outside the index', '--root', root)
 end
 
+# `--compare` is total: any two JSON documents compare without raising,
+# whatever sits at a metric's path on either side.
+def assert_compare_total(tmp)
+  sides = { 'negative' => -2, 'other_negative' => -8, 'positive' => 4, 'zero' => 0, 'null' => nil,
+            'string' => '12', 'object' => { 'max' => 3 }, 'list' => [1], 'tiny' => 1.0e-308, 'huge' => 1.0e308 }
+  paths = sides.to_h do |name, value|
+    path = File.join(tmp, "compare-#{name}.json")
+    File.write(path, JSON.generate('index' => { 'total_units' => value }, 'graph' => { 'edges_per_node' => value }))
+    [name, path]
+  end
+  paths['missing'] = File.join(tmp, 'compare-missing.json').tap { |path| File.write(path, '{"graph":{}}') }
+  paths['array'] = File.join(tmp, 'compare-array.json').tap { |path| File.write(path, '[1, 2]') }
+  # Every pair in process (each would raise here); one pair through the command line.
+  rows = paths.keys.product(paths.keys).to_h do |left, right|
+    table = WoodsShapeProfile::Compare.call(paths[left], paths[right])
+    [[left, right], table.lines.find { |line| line.start_with?('units ') }.to_s.split]
+  end
+  check('--compare negative positive exits 0', profile('--compare', paths['negative'], paths['positive'])
+                                                 .match?(/^units\s+-2\s+4\s+-2\.00x$/))
+  check('negative over positive', rows[%w[negative positive]].last(3) == %w[-2 4 -2.00x])
+  check('negative over negative', rows[%w[negative other_negative]].last(3) == %w[-2 -8 4.00x])
+  check('negative against zero', rows[%w[negative zero]].last == '0.00x' && rows[%w[zero negative]].last == 'inf')
+  %w[null string object list missing array].each do |absent|
+    check("#{absent} reads as no value", rows[['positive', absent]].last(3) == %w[4 - n/a] &&
+                                          rows[[absent, 'negative']].last(3) == %w[- -2 n/a])
+  end
+  check('ratio overflow', rows[%w[tiny huge]].last == 'inf' && rows[%w[huge tiny]].last == '0.00x')
+  output, status = Open3.capture2e(RbConfig.ruby, SCRIPT, '--compare', paths['positive'], SCRIPT)
+  check('a file that is not JSON is refused cleanly', !status.success? && !output.include?('Error)'))
+end
+
 def refused(label, *args)
   output, status = Open3.capture2e(RbConfig.ruby, SCRIPT, *args)
   check("#{label} is refused", !status.success? && !output.include?('profile_version'))
@@ -328,6 +359,8 @@ Dir.mktmpdir('woods-shape-profile') do |tmp|
   check('zero B reads as none of A', profile('--compare', out, empty).match?(/^units\s+6\s+0\s+0\.00x$/))
   check('zero against zero is equal', profile('--compare', empty, empty).match?(/^units\s+0\s+0\s+1\.00x$/))
   check('a zero side sorts first', profile('--compare', out, empty).lines[1].start_with?('units'))
+
+  assert_compare_total(tmp)
 
   puts "PASS shape profile: no planted string emitted, numbers exact, self-check aborts on a bypass#{
     ' (git history skipped: git unavailable)' unless with_git}"

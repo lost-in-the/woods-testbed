@@ -258,6 +258,8 @@ ruby scripts/tools/woods_shape_profile.rb --compare \
 ```
 
 The table lists the ratios that drive extraction cost, largest gap first.
+It takes any two JSON documents: a value that is missing, null or not a number reads as `-` with ratio `n/a`, a zero
+or opposite-signed side sorts as the largest gap, and a file that is not JSON is refused without quoting it.
 
 See [the implementation plan](../../docs/plans/003-functional-publishing-app.md)
 and [validation notes](../../docs/canopy-validation.md) for the measured baseline,

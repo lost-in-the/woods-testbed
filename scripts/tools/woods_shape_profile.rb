@@ -1150,7 +1150,7 @@ module WoodsShapeProfile
     module_function
 
     def call(path_a, path_b)
-      a, b = [path_a, path_b].map { |path| JSON.parse(File.read(path, encoding: 'UTF-8')) }
+      a, b = [path_a, path_b].map { |path| load(path) }
       rows = METRICS.map { |label, path| row(label, dig(a, path), dig(b, path)) }
       rows = rows.sort_by.with_index { |entry, i| [entry[:gap] ? -entry[:gap] : Float::INFINITY, i] }
       lines = [format('%-36s %14s %14s %9s', 'metric (larger gaps first)', 'A', 'B', 'B / A')]
@@ -1160,24 +1160,42 @@ module WoodsShapeProfile
       lines.join("\n")
     end
 
+    # A JSON document, or an abort that names neither the content nor the parser's message (which quotes it).
+    def load(path)
+      JSON.parse(File.read(path, encoding: 'UTF-8'))
+    rescue JSON::ParserError, EncodingError
+      abort 'woods_shape_profile: --compare takes two JSON profiles; one of them is not JSON.'
+    rescue SystemCallError
+      abort 'woods_shape_profile: --compare could not read one of the two files.'
+    end
+
+    # The number at a path, or nil: a missing key, a null, a string, a list, an
+    # object or a non-finite number all read as no value.
     def dig(document, path)
       value = path.reduce(document) do |node, key|
         node.is_a?(Hash) || (node.is_a?(Array) && key.is_a?(Integer)) ? node[key] : nil
       end
-      value.is_a?(Numeric) ? value : nil
+      value.is_a?(Integer) || (value.is_a?(Float) && value.finite?) ? value : nil
     end
 
+    # Total over any two numbers. The ratio shown is B / A; `gap` (for sorting)
+    # is |log(B / A)|, which needs a positive finite ratio, so every other case
+    # is decided first: no value, equal, a zero side, a ratio that overflows or
+    # underflows, and opposite signs (shown signed) all take the largest gap.
     def row(label, left, right)
-      return { label: label, a: left, b: right, ratio: 'n/a', gap: nil } unless left && right
-      return { label: label, a: left, b: right, ratio: '1.00x', gap: 0.0 } if left == right
-      # The ratio shown is B / A, so the two zero cases read differently: B
-      # over a zero A is unbounded, a zero B is none of A. Both are the
-      # largest possible gap for sorting.
-      return { label: label, a: left, b: right, ratio: 'inf', gap: Float::MAX } if left.zero?
-      return { label: label, a: left, b: right, ratio: '0.00x', gap: Float::MAX } if right.zero?
+      base = { label: label, a: left, b: right }
+      return base.merge(ratio: 'n/a', gap: nil) unless left && right
+      return base.merge(ratio: '1.00x', gap: 0.0) if left == right
+      # B over a zero A is unbounded; a zero B is none of A.
+      return base.merge(ratio: 'inf', gap: Float::MAX) if left.zero?
+      return base.merge(ratio: '0.00x', gap: Float::MAX) if right.zero?
 
       ratio = right.to_f / left
-      { label: label, a: left, b: right, ratio: format('%.2fx', ratio), gap: Math.log(ratio).abs }
+      return base.merge(ratio: 'inf', gap: Float::MAX) if ratio.infinite?
+      return base.merge(ratio: '0.00x', gap: Float::MAX) if ratio.zero?
+      return base.merge(ratio: format('%.2fx', ratio), gap: Float::MAX) if ratio.negative?
+
+      base.merge(ratio: format('%.2fx', ratio), gap: Math.log(ratio).abs)
     end
 
     def show(value)
