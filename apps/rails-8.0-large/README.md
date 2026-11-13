@@ -231,6 +231,20 @@ fixed lists. It uses no network and writes nothing but the `--out` file. The
 limits are in the script's header: exact totals and version numbers do describe
 the app, so read the JSON before sending it.
 
+A number in the profile is one of two things.
+It is a quantity the script measured itself: a count of units, edges, files or list entries, a size in bytes or lines,
+a ratio of two such counts, a duration it timed, a depth or rank it computed, or a histogram bucket boundary.
+Or it is a number Woods recorded in the index (the manifest's counts and extractor timings, the generation number,
+`graph_analysis.json` counts), and then it appears only as its log2 bucket boundary (0, 1, 2, 4, 8, ...; for seconds
+also 0.5, 0.25, ... down to 2^-10), never as itself: those sections are `woods_run` and `graph.cycles.analysis`.
+A number is never copied out of the application's metadata: an ID, a timestamp, a port, a column limit or a count
+Woods stored beside a list (`column_count`) is not used; the list itself is measured instead.
+The self-check enforces this: every number must be finite, not negative, and sit under a key on the script's list of
+measured-quantity keys (`MEASURED_KEYS`) or in a table keyed by a unit type, directory or edge label; under a
+copied key or section it must be 0 or a power of two.
+A large measured value (the longest model, the biggest hub) is still emitted exactly: that is the point of the
+profile.
+
 Two profiles of Canopy are checked in under `shape/`: `canopy-base.json` (the
 committed app) and `canopy-scale-large.json` (after `SCALE=large
 generate_scale_app.rb`). Git history is reported as unavailable in a shallow
